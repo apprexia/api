@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { UpdateAnalysisDto } from './dto/update-analysis.dto';
 import { PrismaService } from '../services/prisma/prisma.service';
@@ -8,6 +8,7 @@ import {
   ListingMetadata,
   MetadataScraperService,
 } from '../services/meta-data-scrapper/meta-data-scrapper.service';
+import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class AnalysesService {
@@ -15,15 +16,19 @@ export class AnalysesService {
     private prisma: PrismaService,
     private analysesAiService: AnalysesAiService,
     private metadataScraperService: MetadataScraperService,
+    private usersService: UsersService,
   ) {}
 
-  async create(dto: CreateAnalysisDto) {
+  async create(dto: CreateAnalysisDto, userId: string) {
+    await this.usersService.consumeCredit(userId);
+    const sourceSite = this.getSourceSite(dto.url);
+
     const analysis = await this.prisma.analysis.create({
       data: {
-        userId: '838412aa-87f1-4bfa-bccc-6a31d14cb886',
+        userId,
 
         url: dto.url,
-
+        sourceSite,
         status: 'SCRAPING',
       },
     });
@@ -86,7 +91,7 @@ export class AnalysesService {
         },
       });
 
-      aiResult = await this.analysesAiService.analyze(url);
+      aiResult = await this.analysesAiService.analyze(metadata);
     } catch (error) {
       console.error('Erreur analyse :', error);
 
@@ -102,19 +107,23 @@ export class AnalysesService {
         scoreExplanation: 'Analyse IA indisponible.',
 
         verdict: 'ERROR',
-
+        verdictExplanation: 'Impossible de générer une analyse IA.',
         estimatedValue: 0,
 
         askingPrice: metadata?.price ?? 0,
 
         recommendedPrice: 0,
         negotiationAmount: 0,
+        negotiationAnalysis: '',
 
         description: metadata?.description ?? '',
 
         marketPosition: '',
 
         grossYield: 0,
+        yieldLevel: 'INCONNU',
+        yieldAnalysis: 'Rentabilité non calculée.',
+
         riskLevel: 0,
         negotiationPotential: 0,
 
@@ -150,26 +159,30 @@ export class AnalysesService {
         scoreExplanation: aiResult.scoreExplanation,
 
         verdict: aiResult.verdict,
+        verdictExplanation: aiResult.verdictExplanation,
 
         estimatedValue: aiResult.estimatedValue,
 
-        askingPrice: aiResult.askingPrice,
+        // je recommande plutôt metadata.price ici
+        askingPrice: metadata?.price ?? aiResult.askingPrice ?? 0,
 
         recommendedPrice: aiResult.recommendedPrice,
 
         negotiationAmount: aiResult.negotiationAmount,
+        negotiationPotential: aiResult.negotiationPotential,
+        negotiationAnalysis: aiResult.negotiationAnalysis,
 
         description: aiResult.description,
 
-        marketPosition: aiResult.marketPosition,
+        imageUrl: aiResult.imageUrl,
 
-        grossYield: aiResult.grossYield,
+        marketPosition: aiResult.marketPosition,
 
         riskLevel: aiResult.riskLevel,
 
-        negotiationPotential: aiResult.negotiationPotential,
-
-        imageUrl: aiResult.imageUrl,
+        grossYield: aiResult.grossYield,
+        yieldLevel: aiResult.yieldLevel,
+        yieldAnalysis: aiResult.yieldAnalysis,
 
         strengths: aiResult.strengths,
 
@@ -192,11 +205,15 @@ export class AnalysesService {
     });
   }
 
-  async findAll(page = 1, limit = 10) {
+  async findAll(userId: string, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
       this.prisma.analysis.findMany({
+        where: {
+          userId,
+        },
+
         skip,
         take: limit,
 
@@ -205,7 +222,11 @@ export class AnalysesService {
         },
       }),
 
-      this.prisma.analysis.count(),
+      this.prisma.analysis.count({
+        where: {
+          userId,
+        },
+      }),
     ]);
 
     return {
@@ -217,25 +238,71 @@ export class AnalysesService {
     };
   }
 
-  findOne(id: string) {
-    return this.prisma.analysis.findUnique({
-      where: { id },
+  findOne(id: string, userId: string) {
+    return this.prisma.analysis.findFirst({
+      where: {
+        id,
+        userId,
+      },
+
       include: {
         user: true,
       },
     });
   }
 
-  update(id: string, dto: UpdateAnalysisDto) {
+  async update(id: string, userId: string, dto: UpdateAnalysisDto) {
+    const analysis = await this.prisma.analysis.findFirst({
+      where: {
+        id,
+        userId,
+      },
+    });
+
+    if (!analysis) {
+      throw new NotFoundException('Analyse introuvable');
+    }
+
     return this.prisma.analysis.update({
-      where: { id },
+      where: {
+        id,
+      },
+
       data: dto,
     });
   }
 
-  remove(id: string) {
-    return this.prisma.analysis.delete({
-      where: { id },
+  async remove(id: string, userId: string) {
+    const analysis = await this.prisma.analysis.findFirst({
+      where: {
+        id,
+        userId,
+      },
     });
+
+    if (!analysis) {
+      throw new NotFoundException('Analyse introuvable');
+    }
+
+    return this.prisma.analysis.delete({
+      where: {
+        id,
+      },
+    });
+  }
+
+  private getSourceSite(url: string): string {
+    const hostname = new URL(url).hostname.replace('www.', '');
+
+    const sources: Record<string, string> = {
+      'pap.fr': 'pap',
+      'leboncoin.fr': 'leboncoin',
+      'seloger.com': 'seloger',
+      'bienici.com': 'bienici',
+      'logic-immo.com': 'logicimmo',
+      'paruvendu.fr': 'paruvendu',
+    };
+
+    return sources[hostname] ?? hostname;
   }
 }

@@ -1,26 +1,100 @@
 import { Injectable } from '@nestjs/common';
-import { CreateFavoriteDto } from './dto/create-favorite.dto';
-import { UpdateFavoriteDto } from './dto/update-favorite.dto';
+import { PrismaService } from '../services/prisma/prisma.service';
 
 @Injectable()
 export class FavoritesService {
-  create(createFavoriteDto: CreateFavoriteDto) {
-    return 'This action adds a new favorite';
+  constructor(private prisma: PrismaService) {}
+
+  findAll(userId: string) {
+    return this.prisma.favorite.findMany({
+      where: {
+        userId,
+      },
+
+      select: {
+        analysisId: true,
+      },
+    });
   }
 
-  findAll() {
-    return `This action returns all favorites`;
+  async findFavoriteAnalyses(userId: string, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.analysis.findMany({
+        where: {
+          Favorite: {
+            some: {
+              userId,
+            },
+          },
+        },
+
+        skip,
+
+        take: limit,
+      }),
+
+      this.prisma.analysis.count({
+        where: {
+          Favorite: {
+            some: {
+              userId,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data,
+
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} favorite`;
+  async toggle(userId: string, analysisId: string) {
+    const favorite = await this.prisma.favorite.findUnique({
+      where: {
+        userId_analysisId: {
+          userId,
+          analysisId,
+        },
+      },
+    });
+
+    if (favorite) {
+      await this.prisma.favorite.delete({
+        where: {
+          id: favorite.id,
+        },
+      });
+
+      return {
+        favorite: false,
+      };
+    }
+
+    await this.prisma.favorite.create({
+      data: {
+        userId,
+        analysisId,
+      },
+    });
+
+    return {
+      favorite: true,
+    };
   }
 
-  update(id: number, updateFavoriteDto: UpdateFavoriteDto) {
-    return `This action updates a #${id} favorite`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} favorite`;
+  remove(userId: string, analysisId: string) {
+    return this.prisma.favorite.delete({
+      where: {
+        userId_analysisId: {
+          userId,
+          analysisId,
+        },
+      },
+    });
   }
 }

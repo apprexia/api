@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { chromium } from 'playwright';
+import { CheerioAPI } from 'cheerio';
 
 export interface ListingMetadata {
   url: string;
@@ -62,7 +63,9 @@ export class MetadataScraperService {
       this.logger.log(`Métadonnées insuffisantes, fallback Playwright: ${url}`);
 
       return await this.scrapeWithPlaywright(url);
-    } catch {
+    } catch (error) {
+      console.error('AXIOS ERROR', error);
+
       this.logger.warn(`Erreur extraction HTML, fallback Playwright: ${url}`);
 
       return await this.scrapeWithPlaywright(url);
@@ -87,7 +90,7 @@ export class MetadataScraperService {
 
   private async scrapeWithPlaywright(url: string): Promise<ListingMetadata> {
     const browser = await chromium.launch({
-      headless: true,
+      headless: false,
     });
 
     try {
@@ -95,10 +98,11 @@ export class MetadataScraperService {
 
       await page.goto(url, {
         waitUntil: 'networkidle',
-        timeout: 30000,
       });
 
-      const html = await page.content();
+      await page.waitForTimeout(5000);
+
+      const html: string = await page.content();
 
       const metadata = this.extractMetadata(html, url);
 
@@ -115,9 +119,9 @@ export class MetadataScraperService {
     html: string,
     url: string,
   ): Omit<ListingMetadata, 'source'> {
-    const $ = cheerio.load(html);
+    const $: CheerioAPI = cheerio.load(html);
 
-    const schemas = this.extractSchemas($);
+    const schemas: ListingSchema[] = this.extractSchemas($);
 
     const listing = this.findBestSchema(schemas);
 
@@ -132,17 +136,21 @@ export class MetadataScraperService {
       $('script[type="application/ld+json"]').length,
     );
 
-    const title = this.decodeHtml(
+    const title: string = this.decodeHtml(
       listing?.name ||
         $('meta[property="og:title"]').attr('content') ||
         $('title').text().trim(),
     );
 
-    const description = this.decodeHtml(
+    const description: string = this.decodeHtml(
       listing?.description ||
         $('meta[property="og:description"]').attr('content') ||
         '',
     );
+
+    const ogImage = $('meta[property="og:image"]').attr('content');
+
+    const images = this.extractImages(listing, ogImage);
     return {
       url,
       title,
@@ -151,7 +159,7 @@ export class MetadataScraperService {
 
       currency: listing?.offers?.priceCurrency || listing?.priceCurrency,
 
-      images: this.extractImages(listing),
+      images,
 
       address: this.extractAddress(listing),
     };
@@ -226,12 +234,19 @@ export class MetadataScraperService {
     return cheerio.load(`<div>${value}</div>`)('div').text();
   }
 
-  private extractImages(schema: ListingSchema | null): string[] {
-    if (!schema?.image) {
-      return [];
+  private extractImages(
+    schema: ListingSchema | null,
+    ogImage?: string,
+  ): string[] {
+    if (schema?.image) {
+      return Array.isArray(schema.image) ? schema.image : [schema.image];
     }
 
-    return Array.isArray(schema.image) ? schema.image : [schema.image];
+    if (ogImage) {
+      return [ogImage];
+    }
+
+    return [];
   }
 
   private extractAddress(schema: ListingSchema | null): string | undefined {

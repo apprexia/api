@@ -4,8 +4,10 @@ import { AnalysesController } from './analyses.controller';
 import { AnalysesAiService } from '../services/analyses-ai/analyses-ai.service';
 import { OpenaiService } from '../services/openai/openai.service';
 import { MetadataScraperService } from '../services/meta-data-scrapper/meta-data-scrapper.service';
+import { UsersModule } from '../users/users.module';
 
 @Module({
+  imports: [UsersModule],
   controllers: [AnalysesController],
   providers: [
     AnalysesService,

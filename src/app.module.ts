@@ -10,7 +10,13 @@ import { AnalysesAiService } from './services/analyses-ai/analyses-ai.service';
 import { OpenaiService } from './services/openai/openai.service';
 
 @Module({
-  imports: [PrismaModule, UsersModule, AuthModule, AnalysesModule, FavoritesModule],
+  imports: [
+    PrismaModule,
+    UsersModule,
+    AuthModule,
+    AnalysesModule,
+    FavoritesModule,
+  ],
   controllers: [AppController],
   providers: [AppService, AnalysesAiService, OpenaiService],
 })

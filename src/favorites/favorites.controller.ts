@@ -1,34 +1,57 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Req,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
+
+import { AuthGuard } from '@nestjs/passport';
 import { FavoritesService } from './favorites.service';
-import { CreateFavoriteDto } from './dto/create-favorite.dto';
-import { UpdateFavoriteDto } from './dto/update-favorite.dto';
 
 @Controller('favorites')
+@UseGuards(AuthGuard('jwt'))
 export class FavoritesController {
   constructor(private readonly favoritesService: FavoritesService) {}
 
-  @Post()
-  create(@Body() createFavoriteDto: CreateFavoriteDto) {
-    return this.favoritesService.create(createFavoriteDto);
-  }
-
+  /**
+   * Récupérer les favoris de l'utilisateur connecté
+   */
   @Get()
-  findAll() {
-    return this.favoritesService.findAll();
+  findAll(@Req() req) {
+    return this.favoritesService.findAll(req.user.sub);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.favoritesService.findOne(+id);
+  @Get('with-analyses')
+  @UseGuards(AuthGuard('jwt'))
+  findFavoriteAnalyses(
+    @Req() req,
+    @Query('page') page = '1',
+    @Query('limit') limit = '9',
+  ) {
+    return this.favoritesService.findFavoriteAnalyses(
+      req.user.sub,
+      Number(page),
+      Number(limit),
+    );
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateFavoriteDto: UpdateFavoriteDto) {
-    return this.favoritesService.update(+id, updateFavoriteDto);
+  /**
+   * Ajouter / retirer un favori
+   */
+  @Post(':analysisId')
+  toggle(@Param('analysisId') analysisId: string, @Req() req) {
+    return this.favoritesService.toggle(req.user.sub, analysisId);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.favoritesService.remove(+id);
+  /**
+   * Supprimer un favori
+   */
+  @Delete(':analysisId')
+  remove(@Param('analysisId') analysisId: string, @Req() req) {
+    return this.favoritesService.remove(req.user.sub, analysisId);
   }
 }

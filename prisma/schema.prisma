@@ -20,19 +20,47 @@ model User {
   name   String?
   avatar String?
 
+  // Nombre de crédits disponibles
+  credits Int @default(2)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  analyses  Analysis[]
-  favorites Favorite[]
+  analyses     Analysis[]
+  favorites    Favorite[]
+  transactions CreditTransaction[]
+}
+
+model CreditTransaction {
+  id String @id @default(uuid())
+
+  userId String
+
+  amount Int
+
+  type CreditTransactionType
+
+  description String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum CreditTransactionType {
+  WELCOME
+  ANALYSIS
+  PURCHASE
+  REFUND
+  ADMIN
 }
 
 model Analysis {
-  id     String @id @default(uuid())
-  status String @default("PENDING")
-  userId String
-
-  url String
+  id         String  @id @default(uuid())
+  status     String  @default("PENDING")
+  userId     String
+  sourceSite String?
+  url        String
 
   title String?
   city  String?
@@ -40,8 +68,9 @@ model Analysis {
   rooms   Int?
   surface Float?
 
-  score              Int?
-  scoreExplanation   String?
+  score            Int?
+  scoreExplanation String?
+
   verdict            String?
   verdictExplanation String?
 
@@ -64,10 +93,8 @@ model Analysis {
 
   riskLevel Int?
 
-  grossYield Float?
-
-  yieldLevel String?
-
+  grossYield    Float?
+  yieldLevel    String?
   yieldAnalysis String?
 
   strengths String[]
