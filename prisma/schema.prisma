@@ -40,7 +40,9 @@ model CreditTransaction {
 
   type CreditTransactionType
 
-  description String?
+  stripeSessionId String? @unique
+  packageId       String?
+  description     String?
 
   createdAt DateTime @default(now())
 
@@ -108,6 +110,15 @@ model Analysis {
   Favorite Favorite[]
 }
 
+enum AnalysisStatus {
+  SCRAPING
+  SCRAPED
+  AI_PROCESSING
+  COMPLETED
+  AI_FAILED
+  INSUFFICIENT_DATA
+}
+
 model Favorite {
   id String @id @default(uuid())
 
@@ -120,4 +131,31 @@ model Favorite {
   analysis Analysis @relation(fields: [analysisId], references: [id])
 
   @@unique([userId, analysisId])
+}
+
+model DvfTransaction {
+  id String @id @default(cuid())
+
+  mutationId String @unique
+
+  dateMutation DateTime?
+
+  commune    String
+  codePostal String?
+
+  typeLocal String
+
+  surface Float
+  pieces  Int?
+
+  valeurFonciere Float
+  prixM2         Float
+
+  createdAt DateTime @default(now())
+
+  @@index([commune])
+  @@index([codePostal])
+  @@index([typeLocal])
+  @@index([commune, typeLocal])
+  @@index([codePostal, typeLocal])
 }

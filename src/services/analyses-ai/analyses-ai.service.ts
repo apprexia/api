@@ -7,8 +7,15 @@ import { ListingMetadata } from '../meta-data-scrapper/meta-data-scrapper.servic
 export class AnalysesAiService {
   constructor(private readonly openaiService: OpenaiService) {}
 
-  async analyze(metadata: ListingMetadata): Promise<AnalysisAiResult> {
-    const result = await this.openaiService.analyze(metadata);
+  async analyze(
+    metadata: ListingMetadata,
+    marketData?: {
+      count: number;
+      averagePriceM2: number;
+      estimatedValue: number;
+    } | null,
+  ): Promise<AnalysisAiResult> {
+    const result = await this.openaiService.analyze(metadata, marketData);
 
     console.log('OPENAI RESPONSE');
     console.log(result);

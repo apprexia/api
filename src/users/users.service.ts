@@ -15,7 +15,6 @@ export class UsersService {
         analyses: {
           select: {
             verdict: true,
-            score: true,
           },
         },
 
@@ -33,13 +32,15 @@ export class UsersService {
 
     const analysesCount = user.analyses.length;
 
-    const averageScore =
-      analysesCount === 0
-        ? 0
-        : Math.round(
-            user.analyses.reduce((sum, a) => sum + (a.score ?? 0), 0) /
-              analysesCount,
-          );
+    const investir = user.analyses.filter(
+      (a) => a.verdict === 'INVESTIR',
+    ).length;
+
+    const negocier = user.analyses.filter(
+      (a) => a.verdict === 'NEGOCIER',
+    ).length;
+
+    const eviter = user.analyses.filter((a) => a.verdict === 'EVITER').length;
 
     return {
       id: user.id,
@@ -55,13 +56,14 @@ export class UsersService {
 
         favorites: user.favorites.length,
 
-        averageScore,
+        investir,
+        negocier,
+        eviter,
 
-        investir: user.analyses.filter((a) => a.verdict === 'INVESTIR').length,
-
-        negocier: user.analyses.filter((a) => a.verdict === 'NEGOCIER').length,
-
-        eviter: user.analyses.filter((a) => a.verdict === 'EVITER').length,
+        opportunityRate:
+          analysesCount === 0
+            ? 0
+            : Math.round((investir / analysesCount) * 100),
       },
     };
   }

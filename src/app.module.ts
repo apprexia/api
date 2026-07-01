@@ -8,6 +8,9 @@ import { AnalysesModule } from './analyses/analyses.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { AnalysesAiService } from './services/analyses-ai/analyses-ai.service';
 import { OpenaiService } from './services/openai/openai.service';
+import { CreditsModule } from './credits/credits.module';
+import { StripeModule } from './stripe/stripe.module';
+import { DvfModule } from './dvf/dvf.module';
 
 @Module({
   imports: [
@@ -16,6 +19,9 @@ import { OpenaiService } from './services/openai/openai.service';
     AuthModule,
     AnalysesModule,
     FavoritesModule,
+    CreditsModule,
+    StripeModule,
+    DvfModule,
   ],
   controllers: [AppController],
   providers: [AppService, AnalysesAiService, OpenaiService],

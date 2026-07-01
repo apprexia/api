@@ -6,12 +6,27 @@ import { CheerioAPI } from 'cheerio';
 
 export interface ListingMetadata {
   url: string;
+
   title?: string;
+
   description?: string;
+
   price?: number;
+
+  surface?: number;
+
+  rooms?: number;
+
   currency?: string;
+
   images?: string[];
+
   address?: string;
+
+  commune?: string;
+
+  typeLocal?: 'Maison' | 'Appartement';
+
   source: 'html' | 'playwright';
 }
 
@@ -125,8 +140,6 @@ export class MetadataScraperService {
 
     const listing = this.findBestSchema(schemas);
 
-    const price =
-      listing?.offers?.price ?? listing?.price ?? listing?.offers?.lowPrice;
     console.log('TITLE TAG', $('title').text());
 
     console.log('OG TITLE', $('meta[property="og:title"]').attr('content'));
@@ -150,18 +163,56 @@ export class MetadataScraperService {
 
     const ogImage = $('meta[property="og:image"]').attr('content');
 
-    const images = this.extractImages(listing, ogImage);
+    const images: string[] = this.extractImages(listing, ogImage);
+
+    // Texte complet disponible pour les fallback
+    const fullText = `
+    ${title}
+    ${description}
+    ${$('title').text()}
+    ${$('meta[property="og:title"]').attr('content') ?? ''}
+    ${$('meta[property="og:description"]').attr('content') ?? ''}
+    ${$('body').text()}
+  `;
+
+    const address =
+      this.extractAddress(listing) || this.extractAddressFromText(fullText);
+
+    const price = this.extractPriceFromAllSources({
+      listing,
+      title: $('title').text(),
+      ogTitle: $('meta[property="og:title"]').attr('content') ?? '',
+      ogDescription: $('meta[property="og:description"]').attr('content') ?? '',
+      body: $('body').text(),
+    });
+
+    const surface = this.extractSurface(fullText);
+
+    const commune = this.extractCommune(address ?? fullText);
+
+    const typeLocal = this.detectTypeLocal(title, description);
+
     return {
       url,
+
       title,
+
       description,
+
       price: price !== undefined ? Number(price) : undefined,
 
-      currency: listing?.offers?.priceCurrency || listing?.priceCurrency,
+      currency:
+        listing?.offers?.priceCurrency || listing?.priceCurrency || 'EUR',
 
       images,
 
-      address: this.extractAddress(listing),
+      address,
+
+      surface,
+
+      commune,
+
+      typeLocal,
     };
   }
 
@@ -189,6 +240,16 @@ export class MetadataScraperService {
     });
 
     return schemas;
+  }
+
+  private extractSurface(text: string): number | undefined {
+    const match = text.match(/(\d+(?:[.,]\d+)?)\s?m²/i);
+
+    if (!match) {
+      return undefined;
+    }
+
+    return Number(match[1].replace(',', '.'));
   }
 
   private isListingSchema(value: unknown): value is ListingSchema {
@@ -267,9 +328,157 @@ export class MetadataScraperService {
     return parts.length > 0 ? parts.join(', ') : undefined;
   }
 
+  private extractAddressFromText(text: string): string | undefined {
+    const match = text.match(/\b\d{5}\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ\- ]+/i);
+
+    return match?.[0];
+  }
+
   private isValidResult(data: Omit<ListingMetadata, 'source'>): boolean {
     return Boolean(
       data.title || data.price || data.description || data.images?.length,
     );
+  }
+
+  private extractCommune(address?: string): string | undefined {
+    if (!address) {
+      return undefined;
+    }
+
+    // Nettoyage des scripts parasites
+    const cleanAddress = address
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/var\s+[\s\S]*?;/gi, '')
+      .replace(/FIREWHENREADY\(\);/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleanAddress) {
+      return undefined;
+    }
+
+    const parts = cleanAddress
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    if (!parts.length) {
+      return undefined;
+    }
+
+    let commune = parts[parts.length - 1];
+
+    // Si le dernier élément ressemble à un code postal
+    if (/^\d+$/.test(commune)) {
+      commune = parts[parts.length - 2];
+    }
+
+    return (
+      commune
+        .replace(/[0-9]/g, '')
+        .replace(/-/g, ' ')
+        .replace(/[^\p{L}\s]/gu, '')
+        .trim()
+        .toUpperCase() || undefined
+    );
+  }
+
+  private detectTypeLocal(
+    title: string,
+    description: string,
+  ): 'Maison' | 'Appartement' | undefined {
+    const text = `${title} ${description}`.toLowerCase();
+
+    if (
+      text.includes('appartement') ||
+      text.includes('studio') ||
+      text.includes('t1') ||
+      text.includes('t2') ||
+      text.includes('t3') ||
+      text.includes('t4') ||
+      text.includes('t5')
+    ) {
+      return 'Appartement';
+    }
+
+    if (
+      text.includes('maison') ||
+      text.includes('pavillon') ||
+      text.includes('villa')
+    ) {
+      return 'Maison';
+    }
+
+    return undefined;
+  }
+
+  private extractPriceFromAllSources(data: {
+    listing?: ListingSchema | null;
+    title: string;
+    ogTitle: string;
+    ogDescription: string;
+    body: string;
+  }): number | undefined {
+    // ----------------------------
+    // 1) JSON-LD
+    // ----------------------------
+
+    const jsonLdPrice =
+      data.listing?.offers?.price ??
+      data.listing?.price ??
+      data.listing?.offers?.lowPrice;
+
+    if (jsonLdPrice) {
+      const parsed = Number(String(jsonLdPrice).replace(/[^\d]/g, ''));
+
+      if (!isNaN(parsed)) {
+        console.log('PRICE FROM JSON-LD:', parsed);
+        return parsed;
+      }
+    }
+
+    // ----------------------------
+    // 2) Texte complet
+    // ----------------------------
+
+    const fullText = `
+    ${data.title}
+    ${data.ogTitle}
+    ${data.ogDescription}
+    ${data.body}
+  `;
+
+    // Exemple :
+    // 199.000 €
+    // 276000 €
+    // 160 000 euros
+
+    const matches = fullText.match(
+      /(\d{1,3}(?:[\s\.]\d{3})+|\d{4,6})\s*(?:€|euros?)/gi,
+    );
+
+    if (!matches) {
+      console.log('NO PRICE FOUND');
+      return undefined;
+    }
+
+    const prices = matches.map((value) => {
+      const number = value.replace(/[^\d]/g, '');
+
+      return Number(number);
+    });
+
+    // On garde un prix immobilier réaliste
+    const validPrices = prices.filter(
+      (price) => price >= 20000 && price <= 5000000,
+    );
+
+    if (!validPrices.length) {
+      return undefined;
+    }
+
+    console.log('PRICE FROM TEXT:', validPrices[0]);
+
+    return validPrices[0];
   }
 }

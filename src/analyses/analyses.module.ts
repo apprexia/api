@@ -5,9 +5,11 @@ import { AnalysesAiService } from '../services/analyses-ai/analyses-ai.service';
 import { OpenaiService } from '../services/openai/openai.service';
 import { MetadataScraperService } from '../services/meta-data-scrapper/meta-data-scrapper.service';
 import { UsersModule } from '../users/users.module';
+import { CreditsModule } from '../credits/credits.module';
+import { DvfModule } from '../dvf/dvf.module';
 
 @Module({
-  imports: [UsersModule],
+  imports: [UsersModule, CreditsModule, DvfModule],
   controllers: [AnalysesController],
   providers: [
     AnalysesService,
