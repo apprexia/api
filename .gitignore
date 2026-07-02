@@ -2,6 +2,7 @@
 /dist
 /node_modules
 /build
+/data
 
 # Logs
 logs
@@ -58,3 +59,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /generated/prisma
 
 /generated/prisma
+data/dvf-clean.json
+data/dvf-raw.txt
