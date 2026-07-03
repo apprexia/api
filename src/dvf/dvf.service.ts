@@ -6,35 +6,47 @@ export class DvfService {
   constructor(private prisma: PrismaService) {}
 
   async getMarketData(commune: string, typeLocal: string, surface: number) {
-    const minSurface = surface * 0.7;
-    const maxSurface = surface * 1.3;
+    const normalizedCommune = commune.trim().toUpperCase();
+
+    const normalizedType = typeLocal?.toLowerCase().includes('appartement')
+      ? 'Appartement'
+      : typeLocal?.toLowerCase().includes('maison')
+        ? 'Maison'
+        : null;
+
+    const minSurface = surface * 0.5;
+    const maxSurface = surface * 1.8;
 
     const transactions = await this.prisma.dvfTransaction.findMany({
       where: {
-        commune,
-        typeLocal,
-
+        commune: {
+          equals: normalizedCommune,
+          mode: 'insensitive',
+        },
+        ...(normalizedType && { typeLocal: normalizedType }),
         surface: {
           gte: minSurface,
           lte: maxSurface,
         },
       },
-
       take: 1000,
     });
 
-    if (!transactions.length) {
-      return null;
+    const valid = transactions.filter((t) => t.prixM2 && t.prixM2 > 0);
+
+    if (!valid.length) {
+      return {
+        count: 0,
+        averagePriceM2: 0,
+        estimatedValue: 0,
+      };
     }
 
-    const average =
-      transactions.reduce((sum, t) => sum + t.prixM2, 0) / transactions.length;
+    const average = valid.reduce((sum, t) => sum + t.prixM2, 0) / valid.length;
 
     return {
-      count: transactions.length,
-
+      count: valid.length,
       averagePriceM2: Math.round(average),
-
       estimatedValue: Math.round(average * surface),
     };
   }

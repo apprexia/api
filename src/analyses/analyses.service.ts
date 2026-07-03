@@ -11,6 +11,7 @@ import {
 import { UsersService } from 'src/users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { DvfService } from '../dvf/dvf.service';
+import { CreateManualAnalysisDto } from './dto/create-manual-analysis.dto';
 
 @Injectable()
 export class AnalysesService {
@@ -37,17 +38,18 @@ export class AnalysesService {
       },
     });
 
-    void this.processAnalysis(analysis.id, dto.url);
+    const metadata = await this.metadataScraperService.scrape(dto.url);
+
+    void this.processAnalysis(analysis.id, metadata);
 
     return {
       id: analysis.id,
     };
   }
 
-  private async processAnalysis(analysisId: string, url: string) {
+  private async processAnalysis(analysisId: string, metadata: ListingMetadata) {
+    const defaultImg = 'images/placeholder.png';
     let aiResult: AnalysisAiResult;
-
-    let metadata: ListingMetadata | null = null;
 
     let marketData: {
       count: number;
@@ -57,22 +59,15 @@ export class AnalysesService {
 
     try {
       // -------------------------
-      // ÉTAPE 1 : SCRAPING
+      // ÉTAPE 1 : DÉMARRAGE
       // -------------------------
 
       await this.prisma.analysis.update({
-        where: {
-          id: analysisId,
-        },
+        where: { id: analysisId },
         data: {
           status: 'SCRAPING',
         },
       });
-
-      metadata = await this.metadataScraperService.scrape(url);
-
-      console.log('SCRAPER RESULT');
-      console.log(metadata);
 
       // -------------------------
       // ÉTAPE 2 : DONNÉES DVF
@@ -95,29 +90,21 @@ export class AnalysesService {
       console.log(marketData);
 
       // -------------------------
-      // ÉTAPE 3 : VALIDATION MINIMALE
+      // ÉTAPE 3 : VALIDATION
       // -------------------------
-      //
-      // On ne bloque plus sur commune/surface/type
-      // car le scraper peut être incomplet.
-      //
-      // On bloque uniquement si aucune info exploitable.
-      //
 
       const validation = this.validateMetadata(metadata);
 
       if (!validation.valid) {
         await this.prisma.analysis.update({
-          where: {
-            id: analysisId,
-          },
+          where: { id: analysisId },
 
           data: {
             status: 'INSUFFICIENT_DATA',
 
             title: metadata.title ?? '',
 
-            imageUrl: metadata.images?.[0] ?? '',
+            imageUrl: metadata.images?.[0] || defaultImg,
 
             askingPrice: metadata.price ?? 0,
 
@@ -139,16 +126,14 @@ export class AnalysesService {
       // -------------------------
 
       await this.prisma.analysis.update({
-        where: {
-          id: analysisId,
-        },
+        where: { id: analysisId },
 
         data: {
           status: 'SCRAPED',
 
           title: metadata.title ?? '',
 
-          imageUrl: metadata.images?.[0] ?? '',
+          imageUrl: metadata.images?.[0] || defaultImg,
 
           askingPrice: metadata.price ?? 0,
 
@@ -161,9 +146,7 @@ export class AnalysesService {
       // -------------------------
 
       await this.prisma.analysis.update({
-        where: {
-          id: analysisId,
-        },
+        where: { id: analysisId },
 
         data: {
           status: 'AI_PROCESSING',
@@ -175,13 +158,13 @@ export class AnalysesService {
       console.error('Erreur analyse :', error);
 
       aiResult = {
-        title: metadata?.title ?? 'Analyse indisponible',
+        title: metadata.title ?? 'Analyse indisponible',
 
-        city: metadata?.commune ?? 'N/A',
+        city: metadata.commune ?? 'N/A',
 
-        rooms: 0,
+        rooms: metadata.rooms ?? 0,
 
-        surface: metadata?.surface ?? 0,
+        surface: metadata.surface ?? 0,
 
         score: 0,
 
@@ -193,7 +176,7 @@ export class AnalysesService {
 
         estimatedValue: 0,
 
-        askingPrice: metadata?.price ?? 0,
+        askingPrice: metadata.price ?? 0,
 
         recommendedPrice: 0,
 
@@ -201,7 +184,7 @@ export class AnalysesService {
 
         negotiationAnalysis: '',
 
-        description: metadata?.description ?? '',
+        description: metadata.description ?? '',
 
         marketPosition: '',
 
@@ -215,7 +198,7 @@ export class AnalysesService {
 
         negotiationPotential: 0,
 
-        imageUrl: metadata?.images?.[0] ?? 'images/placeholder.png',
+        imageUrl: metadata.images?.[0] || defaultImg,
 
         strengths: [],
 
@@ -239,9 +222,7 @@ export class AnalysesService {
     // -------------------------
 
     await this.prisma.analysis.update({
-      where: {
-        id: analysisId,
-      },
+      where: { id: analysisId },
 
       data: {
         status: finalStatus,
@@ -264,7 +245,7 @@ export class AnalysesService {
 
         estimatedValue: marketData?.estimatedValue ?? aiResult.estimatedValue,
 
-        askingPrice: metadata?.price ?? aiResult.askingPrice ?? 0,
+        askingPrice: metadata.price ?? aiResult.askingPrice ?? 0,
 
         recommendedPrice: aiResult.recommendedPrice,
 
@@ -276,7 +257,7 @@ export class AnalysesService {
 
         description: aiResult.description,
 
-        imageUrl: aiResult.imageUrl,
+        imageUrl: aiResult.imageUrl || defaultImg,
 
         marketPosition: aiResult.marketPosition,
 
@@ -409,6 +390,48 @@ export class AnalysesService {
     });
   }
 
+  private mapManualDtoToMetadata(
+    dto: CreateManualAnalysisDto,
+  ): ListingMetadata {
+    return {
+      source: 'manual',
+
+      title: `${dto.type} ${dto.surface}m² - ${dto.ville}`,
+
+      address: dto.adresse,
+
+      commune: dto.ville,
+
+      postalCode: dto.codePostal,
+
+      latitude: dto.latitude,
+
+      longitude: dto.longitude,
+
+      typeLocal: dto.type,
+
+      surface: dto.surface,
+
+      rooms: dto.pieces,
+
+      floor: dto.etage ?? null,
+
+      condition: dto.etat,
+
+      dpe: dto.dpe,
+
+      balcony: dto.balcon,
+
+      parking: dto.parking,
+
+      price: dto.prix,
+
+      currency: 'EUR',
+
+      images: [],
+    };
+  }
+
   private getSourceSite(url: string): string {
     const hostname = new URL(url).hostname.replace('www.', '');
 
@@ -444,6 +467,28 @@ export class AnalysesService {
     return {
       valid: missing.length === 0,
       missing,
+    };
+  }
+
+  async createManual(dto: CreateManualAnalysisDto, userId: string) {
+    await this.usersService.consumeCredit(userId);
+    const sourceSite = dto.sourceSite;
+
+    const analysis = await this.prisma.analysis.create({
+      data: {
+        userId,
+        url: 'manual',
+        sourceSite: sourceSite,
+        status: 'SCRAPING',
+      },
+    });
+
+    const metadata: ListingMetadata = this.mapManualDtoToMetadata(dto);
+
+    void this.processAnalysis(analysis.id, metadata);
+
+    return {
+      id: analysis.id,
     };
   }
 }

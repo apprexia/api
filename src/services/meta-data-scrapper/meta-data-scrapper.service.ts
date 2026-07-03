@@ -5,29 +5,47 @@ import { chromium } from 'playwright';
 import { CheerioAPI } from 'cheerio';
 
 export interface ListingMetadata {
-  url: string;
+  // Origine
+  source: 'html' | 'playwright' | 'manual';
 
+  url?: string;
+
+  // Informations générales
   title?: string;
-
   description?: string;
 
-  price?: number;
+  // Localisation
+  address?: string;
+  commune?: string;
+  postalCode?: string;
+
+  latitude?: number;
+  longitude?: number;
+
+  // Bien
+  typeLocal?: 'Maison' | 'Appartement';
 
   surface?: number;
 
   rooms?: number;
 
+  floor?: number | null;
+
+  condition?: string;
+
+  dpe?: string;
+
+  balcony?: boolean;
+
+  parking?: boolean;
+
+  // Prix
+  price?: number;
+
   currency?: string;
 
+  // Médias
   images?: string[];
-
-  address?: string;
-
-  commune?: string;
-
-  typeLocal?: 'Maison' | 'Appartement';
-
-  source: 'html' | 'playwright';
 }
 
 interface SchemaAddress {

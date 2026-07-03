@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AnalysesService } from './analyses.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { UpdateAnalysisDto } from './dto/update-analysis.dto';
+import { CreateManualAnalysisDto } from './dto/create-manual-analysis.dto';
 
 @Controller('analyses')
 export class AnalysesController {
@@ -23,6 +24,12 @@ export class AnalysesController {
   @UseGuards(AuthGuard('jwt'))
   create(@Body() dto: CreateAnalysisDto, @Req() req) {
     return this.analysesService.create(dto, req.user.sub);
+  }
+
+  @Post('manual')
+  @UseGuards(AuthGuard('jwt'))
+  createManual(@Body() dto: CreateManualAnalysisDto, @Req() req) {
+    return this.analysesService.createManual(dto, req.user.sub);
   }
 
   @Get(':id/status')
