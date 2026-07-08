@@ -12,6 +12,10 @@ import { UsersService } from 'src/users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { DvfService } from '../dvf/dvf.service';
 import { CreateManualAnalysisDto } from './dto/create-manual-analysis.dto';
+import { AnalysisMarketService } from 'src/analysis-market/analysis-market.service';
+import { ApprexiaMarketData } from './interfaces/apprexia-market-data.interface';
+import { AnalysisStatus } from '@prisma/client';
+import { DvfMarketData } from './interfaces/dvf-market-data.interface';
 
 @Injectable()
 export class AnalysesService {
@@ -22,25 +26,39 @@ export class AnalysesService {
     private usersService: UsersService,
     private creditsService: CreditsService,
     private dvfService: DvfService,
+    private analysisMarketService: AnalysisMarketService,
   ) {}
 
   async create(dto: CreateAnalysisDto, userId: string) {
     await this.usersService.consumeCredit(userId);
+
     const sourceSite = this.getSourceSite(dto.url);
 
     const analysis = await this.prisma.analysis.create({
       data: {
         userId,
-
         url: dto.url,
         sourceSite,
-        status: 'SCRAPING',
+        status: AnalysisStatus.SCRAPING,
       },
     });
 
-    const metadata = await this.metadataScraperService.scrape(dto.url);
+    try {
+      const metadata = await this.metadataScraperService.scrape(dto.url);
 
-    void this.processAnalysis(analysis.id, metadata);
+      void this.processAnalysis(analysis.id, metadata);
+    } catch (error) {
+      console.error(error);
+
+      await this.prisma.analysis.update({
+        where: { id: analysis.id },
+        data: {
+          status: 'SCRAPING_FAILED',
+        },
+      });
+
+      await this.refundAnalysisCredit(analysis.id);
+    }
 
     return {
       id: analysis.id,
@@ -51,11 +69,7 @@ export class AnalysesService {
     const defaultImg = 'images/placeholder.png';
     let aiResult: AnalysisAiResult;
 
-    let marketData: {
-      count: number;
-      averagePriceM2: number;
-      estimatedValue: number;
-    } | null = null;
+    let marketData: DvfMarketData | null = null;
 
     try {
       // -------------------------
@@ -65,29 +79,45 @@ export class AnalysesService {
       await this.prisma.analysis.update({
         where: { id: analysisId },
         data: {
-          status: 'SCRAPING',
+          status: AnalysisStatus.SCRAPING,
         },
       });
 
       // -------------------------
-      // ÉTAPE 2 : DONNÉES DVF
+      // ÉTAPE 2 : DONNÉES DVF + APPREXIA
       // -------------------------
 
+      let apprexiaMarketData: ApprexiaMarketData | null = null;
+
       if (
-        metadata.commune &&
+        metadata.city &&
         metadata.typeLocal &&
         metadata.surface &&
         metadata.surface > 0
       ) {
-        marketData = await this.dvfService.getMarketData(
-          metadata.commune,
-          metadata.typeLocal,
-          metadata.surface,
-        );
+        const dvfParams = {
+          city: metadata.city,
+          codePostal: metadata.codePostal,
+          typeLocal: metadata.typeLocal!,
+          surface: metadata.surface!,
+        };
+
+        marketData = await this.dvfService.getMarketData(dvfParams);
+
+        apprexiaMarketData =
+          await this.analysisMarketService.getSimilarAnalyses({
+            city: metadata.city,
+            codePostal: metadata.codePostal,
+            typeLocal: metadata.typeLocal,
+            surface: metadata.surface,
+          });
       }
 
       console.log('DVF RESULT');
       console.log(marketData);
+
+      console.log('APPREXIA RESULT');
+      console.log(apprexiaMarketData);
 
       // -------------------------
       // ÉTAPE 3 : VALIDATION
@@ -100,16 +130,13 @@ export class AnalysesService {
           where: { id: analysisId },
 
           data: {
-            status: 'INSUFFICIENT_DATA',
-
+            status: AnalysisStatus.INSUFFICIENT_DATA,
             title: metadata.title ?? '',
-
+            city: this.normalizeCity(metadata.city),
+            codePostal: this.normalizeCodePostal(metadata.codePostal),
             imageUrl: metadata.images?.[0] || defaultImg,
-
             askingPrice: metadata.price ?? 0,
-
             description: metadata.description ?? '',
-
             risks: [
               `Informations manquantes : ${validation.missing.join(', ')}`,
             ],
@@ -129,14 +156,12 @@ export class AnalysesService {
         where: { id: analysisId },
 
         data: {
-          status: 'SCRAPED',
-
+          status: AnalysisStatus.SCRAPED,
           title: metadata.title ?? '',
-
+          city: this.normalizeCity(metadata.city),
+          codePostal: this.normalizeCodePostal(metadata.codePostal),
           imageUrl: metadata.images?.[0] || defaultImg,
-
           askingPrice: metadata.price ?? 0,
-
           description: metadata.description ?? '',
         },
       });
@@ -149,59 +174,42 @@ export class AnalysesService {
         where: { id: analysisId },
 
         data: {
-          status: 'AI_PROCESSING',
+          status: AnalysisStatus.AI_PROCESSING,
         },
       });
 
-      aiResult = await this.analysesAiService.analyze(metadata, marketData);
+      aiResult = await this.analysesAiService.analyze(
+        metadata,
+        marketData,
+        apprexiaMarketData,
+      );
     } catch (error) {
       console.error('Erreur analyse :', error);
 
       aiResult = {
         title: metadata.title ?? 'Analyse indisponible',
-
-        city: metadata.commune ?? 'N/A',
-
+        city: metadata.city ?? 'N/A',
         rooms: metadata.rooms ?? 0,
-
         surface: metadata.surface ?? 0,
-
         score: 0,
-
         scoreExplanation: 'Analyse IA indisponible.',
-
         verdict: 'ERROR',
-
         verdictExplanation: 'Impossible de générer une analyse IA.',
-
-        estimatedValue: 0,
-
+        estimatedValueLow: 0,
+        estimatedValueHigh: 0,
         askingPrice: metadata.price ?? 0,
-
         recommendedPrice: 0,
-
         negotiationAmount: 0,
-
         negotiationAnalysis: '',
-
         description: metadata.description ?? '',
-
         marketPosition: '',
-
         grossYield: 0,
-
         yieldLevel: 'INCONNU',
-
         yieldAnalysis: 'Rentabilité non calculée.',
-
         riskLevel: 0,
-
         negotiationPotential: 0,
-
         imageUrl: metadata.images?.[0] || defaultImg,
-
         strengths: [],
-
         risks: ['Analyse IA indisponible'],
       };
     }
@@ -211,9 +219,11 @@ export class AnalysesService {
     // -------------------------
 
     const finalStatus =
-      aiResult.verdict === 'ERROR' ? 'AI_FAILED' : 'COMPLETED';
+      aiResult.verdict === 'ERROR'
+        ? AnalysisStatus.AI_FAILED
+        : AnalysisStatus.COMPLETED;
 
-    if (finalStatus === 'AI_FAILED') {
+    if (finalStatus === AnalysisStatus.AI_FAILED) {
       await this.refundAnalysisCredit(analysisId);
     }
 
@@ -226,51 +236,33 @@ export class AnalysesService {
 
       data: {
         status: finalStatus,
-
         title: aiResult.title,
-
-        city: aiResult.city,
-
+        city: this.normalizeCity(metadata.city ?? aiResult.city),
+        codePostal: this.normalizeCodePostal(metadata.codePostal),
+        typeLocal: metadata.typeLocal,
         rooms: aiResult.rooms,
-
         surface: aiResult.surface,
-
         score: aiResult.score,
-
         scoreExplanation: aiResult.scoreExplanation,
-
         verdict: aiResult.verdict,
-
         verdictExplanation: aiResult.verdictExplanation,
-
-        estimatedValue: marketData?.estimatedValue ?? aiResult.estimatedValue,
-
+        estimatedValueLow:
+          marketData?.lowEstimate ?? aiResult.estimatedValueLow,
+        estimatedValueHigh:
+          marketData?.highEstimate ?? aiResult.estimatedValueHigh,
         askingPrice: metadata.price ?? aiResult.askingPrice ?? 0,
-
         recommendedPrice: aiResult.recommendedPrice,
-
         negotiationAmount: aiResult.negotiationAmount,
-
         negotiationPotential: aiResult.negotiationPotential,
-
         negotiationAnalysis: aiResult.negotiationAnalysis,
-
         description: aiResult.description,
-
         imageUrl: aiResult.imageUrl || defaultImg,
-
         marketPosition: aiResult.marketPosition,
-
         riskLevel: aiResult.riskLevel,
-
         grossYield: aiResult.grossYield,
-
         yieldLevel: aiResult.yieldLevel,
-
         yieldAnalysis: aiResult.yieldAnalysis,
-
         strengths: aiResult.strengths,
-
         risks: aiResult.risks,
       },
     });
@@ -395,39 +387,22 @@ export class AnalysesService {
   ): ListingMetadata {
     return {
       source: 'manual',
-
-      title: `${dto.type} ${dto.surface}m² - ${dto.ville}`,
-
+      title: `${dto.typeLocal} ${dto.surface}m² - ${dto.ville}`,
       address: dto.adresse,
-
-      commune: dto.ville,
-
-      postalCode: dto.codePostal,
-
+      city: dto.ville,
+      codePostal: dto.codePostal,
       latitude: dto.latitude,
-
       longitude: dto.longitude,
-
-      typeLocal: dto.type,
-
+      typeLocal: dto.typeLocal,
       surface: dto.surface,
-
       rooms: dto.pieces,
-
       floor: dto.etage ?? null,
-
       condition: dto.etat,
-
       dpe: dto.dpe,
-
       balcony: dto.balcon,
-
       parking: dto.parking,
-
       price: dto.prix,
-
       currency: 'EUR',
-
       images: [],
     };
   }
@@ -460,8 +435,8 @@ export class AnalysesService {
       missing.push('surface');
     }
 
-    if (!metadata.commune) {
-      missing.push('commune');
+    if (!metadata.city) {
+      missing.push('city');
     }
 
     return {
@@ -479,7 +454,8 @@ export class AnalysesService {
         userId,
         url: 'manual',
         sourceSite: sourceSite,
-        status: 'SCRAPING',
+        status: AnalysisStatus.SCRAPING,
+        typeLocal: dto.typeLocal,
       },
     });
 
@@ -490,5 +466,21 @@ export class AnalysesService {
     return {
       id: analysis.id,
     };
+  }
+
+  private normalizeCity(city?: string | null): string | null {
+    if (!city) {
+      return null;
+    }
+
+    return city.trim().toUpperCase();
+  }
+
+  private normalizeCodePostal(codePostal?: string | null): string | null {
+    if (!codePostal) {
+      return null;
+    }
+
+    return codePostal.trim();
   }
 }

@@ -4,6 +4,13 @@ import * as cheerio from 'cheerio';
 import { chromium } from 'playwright';
 import { CheerioAPI } from 'cheerio';
 
+interface SchemaAddress {
+  streetAddress?: string;
+  codePostal?: string;
+  addressLocality?: string;
+  addressRegion?: string;
+}
+
 export interface ListingMetadata {
   // Origine
   source: 'html' | 'playwright' | 'manual';
@@ -14,10 +21,11 @@ export interface ListingMetadata {
   title?: string;
   description?: string;
 
-  // Localisation
+  // Localisation (SOURCE BRUTE)
   address?: string;
-  commune?: string;
-  postalCode?: string;
+  streetAddress?: string;
+  city?: string;
+  codePostal?: string;
 
   latitude?: number;
   longitude?: number;
@@ -26,32 +34,22 @@ export interface ListingMetadata {
   typeLocal?: 'Maison' | 'Appartement';
 
   surface?: number;
-
   rooms?: number;
 
   floor?: number | null;
 
   condition?: string;
-
   dpe?: string;
 
   balcony?: boolean;
-
   parking?: boolean;
 
   // Prix
   price?: number;
-
   currency?: string;
 
   // Médias
   images?: string[];
-}
-
-interface SchemaAddress {
-  streetAddress?: string;
-  postalCode?: string;
-  addressLocality?: string;
 }
 
 interface SchemaOffer {
@@ -181,7 +179,7 @@ export class MetadataScraperService {
 
     const ogImage = $('meta[property="og:image"]').attr('content');
 
-    const images: string[] = this.extractImages(listing, ogImage);
+    const images: string[] = this.extractImages(listing, ogImage, $);
 
     // Texte complet disponible pour les fallback
     const fullText = `
@@ -193,8 +191,12 @@ export class MetadataScraperService {
     ${$('body').text()}
   `;
 
-    const address =
-      this.extractAddress(listing) || this.extractAddressFromText(fullText);
+    const location = this.extractLocation({
+      listing,
+      title,
+      ogTitle: $('meta[property="og:title"]').attr('content'),
+      description,
+    });
 
     const price = this.extractPriceFromAllSources({
       listing,
@@ -206,30 +208,21 @@ export class MetadataScraperService {
 
     const surface = this.extractSurface(fullText);
 
-    const commune = this.extractCommune(address ?? fullText);
-
     const typeLocal = this.detectTypeLocal(title, description);
 
     return {
       url,
-
       title,
-
       description,
-
       price: price !== undefined ? Number(price) : undefined,
-
       currency:
         listing?.offers?.priceCurrency || listing?.priceCurrency || 'EUR',
-
       images,
-
-      address,
-
+      address: location.address,
+      streetAddress: location.streetAddress,
+      city: location.city,
+      codePostal: location.codePostal,
       surface,
-
-      commune,
-
       typeLocal,
     };
   }
@@ -316,16 +309,36 @@ export class MetadataScraperService {
   private extractImages(
     schema: ListingSchema | null,
     ogImage?: string,
+    $?: CheerioAPI,
   ): string[] {
+    const images: string[] = [];
+
+    // JSON LD
     if (schema?.image) {
-      return Array.isArray(schema.image) ? schema.image : [schema.image];
+      if (Array.isArray(schema.image)) {
+        images.push(...schema.image);
+      } else {
+        images.push(schema.image);
+      }
     }
 
+    // Open Graph
     if (ogImage) {
-      return [ogImage];
+      images.push(ogImage);
     }
 
-    return [];
+    // Meta images supplémentaires
+    if ($) {
+      $('meta[property="og:image"]').each((_, el) => {
+        const src = $(el).attr('content');
+
+        if (src) {
+          images.push(src);
+        }
+      });
+    }
+
+    return [...new Set(images)];
   }
 
   private extractAddress(schema: ListingSchema | null): string | undefined {
@@ -337,7 +350,7 @@ export class MetadataScraperService {
 
     const parts = [
       address.streetAddress,
-      address.postalCode,
+      address.codePostal,
       address.addressLocality,
     ].filter(
       (value): value is string => typeof value === 'string' && value.length > 0,
@@ -346,11 +359,11 @@ export class MetadataScraperService {
     return parts.length > 0 ? parts.join(', ') : undefined;
   }
 
-  private extractAddressFromText(text: string): string | undefined {
-    const match = text.match(/\b\d{5}\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ\- ]+/i);
-
-    return match?.[0];
-  }
+  // private extractAddressFromText(text: string): string | undefined {
+  //   const match = text.match(/\b\d{5}\s+[A-ZÀ-Ÿ][A-Za-zÀ-ÿ\- ]+/i);
+  //
+  //   return match?.[0];
+  // }
 
   private isValidResult(data: Omit<ListingMetadata, 'source'>): boolean {
     return Boolean(
@@ -394,7 +407,6 @@ export class MetadataScraperService {
     return (
       commune
         .replace(/[0-9]/g, '')
-        .replace(/-/g, ' ')
         .replace(/[^\p{L}\s]/gu, '')
         .trim()
         .toUpperCase() || undefined
@@ -498,5 +510,115 @@ export class MetadataScraperService {
     console.log('PRICE FROM TEXT:', validPrices[0]);
 
     return validPrices[0];
+  }
+
+  private extractCommuneFromTitle(title: string): string | undefined {
+    const cpMatch = title.match(/(\d{5})\)/);
+
+    if (!cpMatch) {
+      return undefined;
+    }
+
+    const beforeCp = title.substring(0, cpMatch.index);
+
+    const matches = beforeCp.match(
+      /[A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]+(?:[- ][A-ZÀ-Ÿ][A-Za-zÀ-ÿ-]+)*/g,
+    );
+
+    if (!matches?.length) {
+      return undefined;
+    }
+
+    return matches[matches.length - 1].toUpperCase();
+  }
+
+  private extractLocation(data: {
+    listing: ListingSchema | null;
+    title: string;
+    ogTitle?: string;
+    description?: string;
+  }) {
+    const address = data.listing?.address;
+
+    const streetAddress = address?.streetAddress;
+
+    // ⚠️ on garde city comme ville brute (peut contenir "Paris 4e")
+    let city = address?.addressLocality;
+
+    // ⚠️ on standardise vers codePostal (plus codePostal)
+    let codePostal = address?.codePostal;
+
+    const text = [
+      data.title,
+      data.ogTitle,
+      data.description,
+      streetAddress,
+      city,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    // ----------------------------
+    // 1. EXTRACTION CODE POSTAL
+    // ----------------------------
+    if (!codePostal) {
+      const cp = text.match(/\b(0[1-9]|[1-8]\d|9[0-5])\d{3}\b/);
+      codePostal = cp?.[0];
+    }
+
+    // ----------------------------
+    // 2. EXTRACTION VILLE (CAS CP + VILLE)
+    // ----------------------------
+    if (!city && codePostal) {
+      const regex = new RegExp(`${codePostal}\\s+([A-Za-zÀ-ÿ'\\- ]+)`, 'i');
+      const match = text.match(regex);
+      city = match?.[1]?.trim();
+    }
+
+    // ----------------------------
+    // 3. CAS PAP / PARENTHÈSES
+    // ----------------------------
+    if (!city) {
+      const match = text.match(/([A-Za-zÀ-ÿ' -]+)\s*\(\s*\d{5}\s*\)/);
+      city = match?.[1]?.trim();
+    }
+
+    // ----------------------------
+    // 4. NORMALISATION VILLES IMPORTANTES
+    // ----------------------------
+    if (city) {
+      city = city
+        // enlève arrondissements: "4e", "03", etc
+        .replace(/\b\d{1,2}(e|er)?\b/gi, '')
+        .replace(/arrondissement/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // normalisation grandes villes
+      if (/paris/i.test(city)) city = 'Paris';
+      if (/lyon/i.test(city)) city = 'Lyon';
+      if (/marseille/i.test(city)) city = 'Marseille';
+    }
+
+    // ----------------------------
+    // 5. RETURN NORMALISÉ
+    // ----------------------------
+    return {
+      streetAddress,
+      city: this.normalizeCity(city),
+      codePostal,
+      address: [streetAddress, codePostal, city].filter(Boolean).join(', '),
+    };
+  }
+
+  private normalizeCity(city?: string): string | undefined {
+    if (!city) return undefined;
+
+    return city
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }

@@ -11,6 +11,7 @@ import { OpenaiService } from './services/openai/openai.service';
 import { CreditsModule } from './credits/credits.module';
 import { StripeModule } from './stripe/stripe.module';
 import { DvfModule } from './dvf/dvf.module';
+import { AnalysisMarketService } from './analysis-market/analysis-market.service';
 
 @Module({
   imports: [
@@ -24,6 +25,6 @@ import { DvfModule } from './dvf/dvf.module';
     DvfModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AnalysesAiService, OpenaiService],
+  providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService],
 })
 export class AppModule {}

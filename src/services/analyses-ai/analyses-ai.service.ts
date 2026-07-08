@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { OpenaiService } from '../openai/openai.service';
 import { AnalysisAiResult } from '../../analyses/interfaces/analysis-ai-result.interface';
 import { ListingMetadata } from '../meta-data-scrapper/meta-data-scrapper.service';
+import { DvfMarketData } from '../../analyses/interfaces/dvf-market-data.interface';
+import { ApprexiaMarketData } from '../../analyses/interfaces/apprexia-market-data.interface';
 
 @Injectable()
 export class AnalysesAiService {
@@ -9,13 +11,14 @@ export class AnalysesAiService {
 
   async analyze(
     metadata: ListingMetadata,
-    marketData?: {
-      count: number;
-      averagePriceM2: number;
-      estimatedValue: number;
-    } | null,
+    marketData?: DvfMarketData | null,
+    apprexiaMarketData?: ApprexiaMarketData | null,
   ): Promise<AnalysisAiResult> {
-    const result = await this.openaiService.analyze(metadata, marketData);
+    const result = await this.openaiService.analyze(
+      metadata,
+      marketData,
+      apprexiaMarketData,
+    );
 
     console.log('OPENAI RESPONSE');
     console.log(result);

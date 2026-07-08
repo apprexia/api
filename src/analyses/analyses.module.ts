@@ -7,6 +7,7 @@ import { MetadataScraperService } from '../services/meta-data-scrapper/meta-data
 import { UsersModule } from '../users/users.module';
 import { CreditsModule } from '../credits/credits.module';
 import { DvfModule } from '../dvf/dvf.module';
+import { AnalysisMarketService } from '../analysis-market/analysis-market.service';
 
 @Module({
   imports: [UsersModule, CreditsModule, DvfModule],
@@ -16,6 +17,7 @@ import { DvfModule } from '../dvf/dvf.module';
     AnalysesAiService,
     OpenaiService,
     MetadataScraperService,
+    AnalysisMarketService,
   ],
 })
 export class AnalysesModule {}

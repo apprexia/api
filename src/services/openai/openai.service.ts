@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ListingMetadata } from '../meta-data-scrapper/meta-data-scrapper.service';
+import { ApprexiaMarketData } from '../../analyses/interfaces/apprexia-market-data.interface';
+import { DvfMarketData } from '../../analyses/interfaces/dvf-market-data.interface';
 
 @Injectable()
 export class OpenaiService {
@@ -10,49 +12,190 @@ export class OpenaiService {
 
   async analyze(
     metadata: ListingMetadata,
-    marketData?: {
-      count: number;
-      averagePriceM2: number;
-      estimatedValue: number;
-    } | null,
+    marketData?: DvfMarketData | null,
+    apprexiaMarketData?: ApprexiaMarketData | null,
   ) {
+    const apprexiaInfo = apprexiaMarketData
+      ? `
+
+DONNÉES APPREXIA
+(Analyses historiques de biens similaires)
+
+Nombre d'analyses comparables :
+${apprexiaMarketData.count}
+
+Score moyen :
+${apprexiaMarketData.averageScore}/100
+
+Rendement brut moyen :
+${apprexiaMarketData.averageYield.toFixed(1)} %
+
+Prix affiché moyen :
+${Math.round(apprexiaMarketData.averageAskingPrice)} €
+
+Prix recommandé moyen :
+${Math.round(apprexiaMarketData.averageRecommendedPrice)} €
+
+Négociation moyenne observée :
+${Math.round(apprexiaMarketData.averageNegotiation)} €
+
+Réduction moyenne nécessaire :
+${apprexiaMarketData.averageDiscountPercent.toFixed(1)} %
+
+Niveau de confiance des comparables :
+${apprexiaMarketData.confidence} %
+
+Plus le niveau de confiance est élevé,
+plus les analyses historiques sont représentatives.
+
+Répartition :
+
+INVESTIR :
+${apprexiaMarketData.investir}
+
+NEGOCIER :
+${apprexiaMarketData.negocier}
+
+EVITER :
+${apprexiaMarketData.eviter}
+
+
+UTILISATION DES DONNÉES APPREXIA :
+
+Ces données représentent des analyses déjà réalisées
+sur des biens similaires.
+
+Elles servent à comparer :
+
+- la cohérence du prix demandé
+- le potentiel de négociation
+- le rendement
+- le score
+- le verdict final
+
+Apprexia complète la DVF mais ne la remplace pas.
+
+`
+      : `
+DONNÉES APPREXIA :
+
+Aucune analyse historique disponible.
+`;
+
     const marketInfo = marketData
       ? `
-DONNÉES DVF (ventes immobilières réelles) :
+
+DONNÉES DVF
+(Ventes immobilières réellement enregistrées)
+
 
 Nombre de transactions comparables :
 ${marketData.count}
 
-Prix moyen constaté au m² :
-${marketData.averagePriceM2} €
 
-Valeur estimée selon les ventes DVF :
-${marketData.estimatedValue} €
+Prix moyen constaté :
+${marketData.averagePriceM2} €/m²
 
-IMPORTANT :
 
-Les données DVF proviennent de ventes immobilières réellement enregistrées.
+Prix médian :
+${marketData.medianPriceM2} €/m²
 
-Elles doivent être considérées comme une référence prioritaire pour estimer la valeur du bien.
+
+Prix ajusté selon modèle :
+${marketData.adjustedPriceM2} €/m²
+
+Référence principale :
+
+- utiliser prioritairement adjustedPriceM2
+- vérifier avec medianPriceM2
+- averagePriceM2 est uniquement indicatif.
+
+Valeur estimée DVF :
+${marketData.dvfReferenceValue} €
+
+
+Fourchette basse :
+${marketData.lowEstimate} €
+
+
+Fourchette haute :
+${marketData.highEstimate} €
+
+
+Niveau de confiance :
+${marketData.confidence}%
+
+INTERPRÉTATION DVF :
+
+La DVF constitue la meilleure référence
+de prix disponible.
+
+Cependant elle ne prend pas en compte :
+
+- la vue
+- la qualité de la résidence
+- les prestations
+- les rénovations
+- la rareté du bien
+
+Ces éléments doivent être intégrés
+pour déterminer la valeur finale.
+
+Un bien peut dépasser la DVF si :
+
+- emplacement exceptionnel
+- centre-ville recherché
+- proximité immédiate plage ou port
+- vue mer
+- terrasse importante
+- piscine
+- résidence premium
+- prestations rares
+
+Lorsque DVF et Apprexia sont disponibles :
+
+La DVF représente le marché réel.
+
+Apprexia représente les comportements observés
+sur des annonces comparables.
+
+Le verdict final doit utiliser les deux.
+
+Si elles conduisent à des conclusions différentes,
+explique pourquoi.
 
 Analyse obligatoirement :
 
-- l'écart entre le prix demandé et la valeur DVF
-- le prix au m² de l'annonce par rapport au marché
-- le potentiel de négociation
-- si le bien semble :
-  - sous-évalué
-  - au prix du marché
-  - surévalué
+1) L'écart entre prix demandé et valeur DVF.
 
-Justifie ton verdict avec ces données.
+2) Le prix au m² demandé par rapport au marché.
+
+3) Si la différence est justifiée par les prestations.
+
+4) Le potentiel réel de négociation.
+
+
+
+Si DVF et prestations racontent deux histoires différentes,
+explique pourquoi.
+
+
+
 `
       : `
+
 DONNÉES DVF :
 
-Aucune donnée de vente comparable disponible.
+Aucune donnée disponible.
 
-Fais l'analyse uniquement avec les informations de l'annonce.
+L'estimation devra utiliser :
+
+- localisation
+- type de bien
+- surface
+- prestations
+- marché local connu.
+
 `;
 
     const response = await this.client.responses.create({
@@ -60,14 +203,15 @@ Fais l'analyse uniquement avec les informations de l'annonce.
 
       input: `
 
-Tu es un expert immobilier spécialisé dans l'analyse d'investissement.
+Tu es un agent immobilier expert spécialisé
+dans l'évaluation de biens immobiliers.
 
-Analyse cette annonce immobilière.
+Ton objectif est de produire une estimation
+réaliste du marché, comme un professionnel.
 
 
-========================
-ANNONCE
-========================
+ANNONCE IMMOBILIÈRE
+
 
 Titre :
 ${metadata.title ?? ''}
@@ -85,7 +229,7 @@ Surface :
 ${metadata.surface ?? 0} m²
 
 
-Nombre de pièces :
+Pièces :
 ${metadata.rooms ?? 0}
 
 
@@ -94,127 +238,194 @@ ${metadata.address ?? ''}
 
 
 Ville :
-${metadata.commune ?? ''}
+${metadata.city ?? ''}
 
 
-Type de bien :
+Type :
 ${metadata.typeLocal ?? ''}
 
 
-Images disponibles :
+Photos :
 ${metadata.images?.join(', ') ?? ''}
 
 
 
-========================
-MARCHÉ IMMOBILIER
-========================
-
 ${marketInfo}
 
 
-
-========================
-RÈGLES DE SORTIE
-========================
-
-Réponds UNIQUEMENT avec un JSON valide.
-
-Ne mets jamais de markdown.
-Ne mets jamais :
-\`\`\`json
-
-Le JSON doit respecter exactement cette structure :
-
-{
-"title": "",
-"city": "",
-
-"rooms": 0,
-"surface": 0,
-
-"score": 0,
-"scoreExplanation": "",
-
-"verdict": "INVESTIR",
-"verdictExplanation": "",
-
-"estimatedValue": 0,
-"askingPrice": 0,
-
-"recommendedPrice": 0,
-
-"negotiationAmount": 0,
-"negotiationPotential": 0,
-"negotiationAnalysis": "",
-
-"description": "",
-
-"imageUrl": "",
-
-"marketPosition": "",
-
-"riskLevel": 0,
-
-"grossYield": 0,
-"yieldLevel": "",
-"yieldAnalysis": "",
-
-"strengths": [],
-
-"risks": []
-}
-
-========================
-CONSIGNES
-========================
-
-- score est un entier entre 0 et 100.
-
-- riskLevel est un entier entre 0 et 100.
-
-- negotiationPotential est un entier entre 0 et 100.
+${apprexiaInfo}
 
 
-- verdict doit être exactement :
+MÉTHODE D'ANALYSE OBLIGATOIRE
+
+Tu es un expert immobilier.
+
+Ton analyse doit suivre les étapes suivantes :
+
+1. Estimer la valeur réelle du bien.
+2. Comparer cette valeur au prix demandé.
+3. Identifier les éléments qui justifient une éventuelle prime ou décote.
+4. Évaluer les risques et les points forts.
+5. Déterminer le potentiel de négociation.
+6. Calculer le score global.
+7. Donner un verdict final.
+
+Le verdict doit être l'une des valeurs suivantes :
+
 INVESTIR
 NEGOCIER
 EVITER
 
-- estimatedValue ne doit JAMAIS être égal automatiquement au prix affiché.
+IMPORTANT SUR estimatedValue
 
-- Si des données DVF existent :
-  estimatedValue doit être calculé principalement à partir du prix moyen DVF au m².
+La valeur du marché ne doit pas être représentée par un montant unique.
 
-- Si aucune donnée DVF n'est disponible :
-  estimatedValue doit être estimé à partir :
-    - du prix au m² habituel du secteur,
-    - de la ville,
-    - du type de bien,
-    - de la surface,
-    - des caractéristiques du logement.
+Retourne obligatoirement :
 
-- estimatedValue représente la valeur probable du marché, pas le prix demandé.
+- estimatedValueLow
+- estimatedValueHigh
 
-- Si aucune donnée DVF n'est disponible, indique clairement dans scoreExplanation que l'estimation est moins fiable.
+Ces deux valeurs représentent la fourchette de valeur probable du bien après prise en compte :
 
-- Ne copie jamais simplement askingPrice dans estimatedValue.
+- des données DVF ;
+- des comparables Apprexia ;
+- de la localisation ;
+- des prestations ;
+- de la rareté du bien.
 
-- recommendedPrice doit correspondre au prix conseillé après analyse.
+La fourchette doit rester réaliste.
 
-- negotiationAmount représente l'écart entre prix affiché et prix recommandé.
+L'écart entre estimatedValueLow et estimatedValueHigh doit généralement être compris entre 5 % et 10 %, sauf si les données disponibles sont insuffisantes ou très hétérogènes.
 
-- grossYield correspond au rendement locatif brut estimé en pourcentage.
+IMPORTANT SUR dvfReferenceValue
 
-- yieldLevel doit être :
+dvfReferenceValue correspond à la valeur issue du modèle DVF avant toute correction liée aux prestations, à la localisation ou à la rareté du bien.
+
+IMPORTANT SUR recommendedPrice
+
+recommendedPrice représente le prix auquel l'acheteur devrait acquérir le bien aujourd'hui.
+
+Il doit être cohérent avec estimatedValue.
+
+Il peut être :
+
+- inférieur au prix affiché si le bien est surévalué ;
+- égal au prix affiché si le prix est cohérent ;
+- supérieur au prix affiché uniquement si le bien est sous-évalué.
+
+IMPORTANT SUR marketPosition
+
+marketPosition doit obligatoirement prendre l'une des valeurs suivantes :
+
+SOUS_EVALUE
+PRIX_MARCHE
+LEGEREMENT_SURCOTE
+SURCOTE
+
+Cette valeur est déterminée en comparant askingPrice à estimatedValue, et non uniquement à la valeur DVF.
+
+IMPORTANT SUR marketAdjustment
+
+marketAdjustment explique pourquoi estimatedValue est différente de dvfReferenceValue.
+
+Exemples :
+
+- Prime de 12 % justifiée par une résidence premium avec piscine et terrasse.
+- Décote de 8 % liée à d'importants travaux de rénovation.
+
+IMPORTANT SUR score
+
+score est un entier compris entre 0 et 100.
+
+Il représente l'intérêt global du bien.
+
+Le score doit tenir compte simultanément :
+
+- du prix ;
+- de la localisation ;
+- des prestations ;
+- du potentiel locatif ;
+- du potentiel de négociation ;
+- des données DVF ;
+- des comparables Apprexia.
+
+Un bien très cher peut obtenir un excellent score si ses qualités justifient son prix.
+
+IMPORTANT SUR riskLevel
+
+riskLevel est un entier compris entre 0 et 100.
+
+IMPORTANT SUR negotiationPotential
+
+negotiationPotential est un entier compris entre 0 et 100.
+
+IMPORTANT SUR verdict
+
+Le verdict est une synthèse globale.
+
+Il ne dépend jamais uniquement :
+
+- du score ;
+- du prix ;
+- de l'écart avec la DVF.
+
+Il doit prendre en compte :
+
+- la qualité intrinsèque du bien ;
+- la localisation ;
+- les prestations ;
+- le potentiel de négociation ;
+- les données DVF ;
+- les comparables Apprexia.
+
+Deux biens ayant un score similaire peuvent avoir des verdicts différents selon leurs risques ou leur potentiel de négociation.
+
+IMPORTANT SUR grossYield
+
+grossYield représente le rendement locatif brut exprimé en pourcentage.
+
+IMPORTANT SUR yieldLevel
+
+yieldLevel doit être obligatoirement :
+
 FAIBLE
 MOYEN
 BON
 EXCELLENT
 
-- strengths contient uniquement des points positifs.
+Réponds UNIQUEMENT avec un JSON valide.
 
-- risks contient uniquement des risques.
+Structure obligatoire :
+
+{
+  "title": "",
+  "description": "",
+  "imageUrl": "",
+  "city": "",
+  "rooms": 0,
+  "surface": 0,
+  "score": 0,
+  "scoreExplanation": "",
+  "verdict": "INVESTIR",
+  "verdictExplanation": "",
+  "estimatedValueLow": 0,
+  "estimatedValueHigh": 0,
+  "dvfReferenceValue": 0,
+  "askingPrice": 0,
+  "recommendedPrice": 0,
+  "negotiationAmount": 0,
+  "negotiationPotential": 0,
+  "negotiationAnalysis": "",
+  "marketPosition": "",
+  "marketAdjustment": "",
+  "riskLevel": 0,
+  "description": "",
+  "grossYield": 0,
+  "yieldLevel": "",
+  "yieldAnalysis": "",
+  "strengths": [],
+  "risks": []
+}
 
 Retourne uniquement le JSON.
 `,

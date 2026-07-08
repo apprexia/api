@@ -32,21 +32,15 @@ model User {
 }
 
 model CreditTransaction {
-  id String @id @default(uuid())
-
-  userId String
-
-  amount Int
-
-  type CreditTransactionType
-
-  stripeSessionId String? @unique
+  id              String                @id @default(uuid())
+  userId          String
+  amount          Int
+  type            CreditTransactionType
+  stripeSessionId String?               @unique
   packageId       String?
   description     String?
-
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime              @default(now())
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum CreditTransactionType {
@@ -64,8 +58,11 @@ model Analysis {
   sourceSite String?
   url        String
 
-  title String?
-  city  String?
+  typeLocal  String?
+  title      String?
+  city       String?
+  codePostal String?
+  dvfKey     String?
 
   rooms   Int?
   surface Float?
@@ -76,22 +73,20 @@ model Analysis {
   verdict            String?
   verdictExplanation String?
 
-  estimatedValue Float?
-  askingPrice    Float?
+  dvfReferenceValue Float?
 
+  estimatedValueLow  Float?
+  estimatedValueHigh Float?
+
+  askingPrice      Float?
   recommendedPrice Float?
 
-  negotiationAmount Float?
-
-  description String?
-
-  imageUrl String?
-
-  marketPosition String?
-
+  negotiationAmount    Float?
   negotiationPotential Int?
+  negotiationAnalysis  String?
 
-  negotiationAnalysis String?
+  marketPosition   String?
+  marketAdjustment String?
 
   riskLevel Int?
 
@@ -99,19 +94,25 @@ model Analysis {
   yieldLevel    String?
   yieldAnalysis String?
 
-  strengths String[]
+  description String?
+  imageUrl    String?
 
-  risks String[]
+  strengths String[]
+  risks     String[]
 
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-
+  user     User       @relation(fields: [userId], references: [id])
   Favorite Favorite[]
+
+  @@index([city])
+  @@index([codePostal])
+  @@index([city, codePostal])
 }
 
 enum AnalysisStatus {
   SCRAPING
+  SCRAPING_FAILED
   SCRAPED
   AI_PROCESSING
   COMPLETED
@@ -120,42 +121,35 @@ enum AnalysisStatus {
 }
 
 model Favorite {
-  id String @id @default(uuid())
-
+  id         String   @id @default(uuid())
   userId     String
   analysisId String
-
-  createdAt DateTime @default(now())
-
-  user     User     @relation(fields: [userId], references: [id])
-  analysis Analysis @relation(fields: [analysisId], references: [id])
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  analysis   Analysis @relation(fields: [analysisId], references: [id])
 
   @@unique([userId, analysisId])
 }
 
 model DvfTransaction {
-  id String @id @default(cuid())
-
-  mutationId String @unique
-
-  dateMutation DateTime?
-
-  commune    String
-  codePostal String?
-
-  typeLocal String
-
-  surface Float
-  pieces  Int?
-
+  id             String    @id @default(cuid())
+  mutationId     String    @unique
+  dateMutation   DateTime?
+  year           Int?
+  city           String?
+  codePostal     String?
+  typeLocal      String
+  surface        Float
+  pieces         Int?
   valeurFonciere Float
   prixM2         Float
+  createdAt      DateTime  @default(now())
 
-  createdAt DateTime @default(now())
-
-  @@index([commune])
+  @@index([city])
   @@index([codePostal])
   @@index([typeLocal])
-  @@index([commune, typeLocal])
-  @@index([codePostal, typeLocal])
+  @@index([city, typeLocal])
+  @@index([city, codePostal])
+  @@index([year, city])
+  @@index([year, city, typeLocal])
 }

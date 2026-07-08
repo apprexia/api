@@ -4,7 +4,7 @@ export class CreateManualAnalysisDto {
   codePostal: string;
   latitude: number;
   longitude: number;
-  type: 'Maison' | 'Appartement';
+  typeLocal: 'Maison' | 'Appartement';
   surface: number;
   pieces: number;
   etat: string;

@@ -5,86 +5,99 @@ const prisma = new PrismaClient();
 
 const BATCH_SIZE = 1000;
 
+// =========================
+// VALIDATION DATE SAFE
+// =========================
+function isValidDate(date: any): boolean {
+  return date && !isNaN(new Date(date).getTime());
+}
+
 async function importDvf() {
   const file = fs.readFileSync('./data/dvf-clean.json', 'utf8');
-
   const data = JSON.parse(file);
-  let skipped = 0;
 
   console.log(`📦 ${data.length} lignes à importer`);
+
+  let skipped = 0;
   let totalWithoutType = 0;
   let totalWithoutSurface = 0;
   let totalWithoutDate = 0;
+
   for (let i = 0; i < data.length; i += BATCH_SIZE) {
-    const batch = data
-      .slice(i, i + BATCH_SIZE)
+    const batchRaw = data.slice(i, i + BATCH_SIZE);
+
+    // =========================
+    // FILTER PROPRE + TRACE
+    // =========================
+    const batch = batchRaw
       .filter((item: any) => {
-        if (!item.typeLocal) {
-          totalWithoutType++;
-        }
+        const hasType = !!item.typeLocal;
+        const hasSurface = item.surface > 0;
+        const hasDate = isValidDate(item.dateMutation);
 
-        if (!item.surface || item.surface <= 0) {
-          totalWithoutSurface++;
-        }
+        if (!hasType) totalWithoutType++;
+        if (!hasSurface) totalWithoutSurface++;
+        if (!hasDate) totalWithoutDate++;
 
-        if (isNaN(new Date(item.dateMutation).getTime())) {
-          totalWithoutDate++;
-        }
+        const valid = hasType && hasSurface && hasDate;
 
-        const valid =
-          item.commune &&
-          item.typeLocal &&
-          item.surface > 0 &&
-          !isNaN(new Date(item.dateMutation).getTime());
-
-        if (!valid) {
-          skipped++;
-        }
+        if (!valid) skipped++;
 
         return valid;
       })
-      .map((item: any) => ({
-        mutationId: item.mutationId,
+      .map((item: any) => {
+        const date = new Date(item.dateMutation);
 
-        dateMutation: new Date(item.dateMutation),
+        return {
+          mutationId: item.mutationId,
 
-        commune: item.commune,
+          dateMutation: date,
 
-        codePostal: item.codePostal,
+          // ⭐ ajout important
+          year: date.getFullYear(),
 
-        typeLocal: item.typeLocal,
+          city: item.commune,
 
-        surface: Number(item.surface),
+          codePostal: item.codePostal,
 
-        pieces: item.pieces ? Number(item.pieces) : null,
+          typeLocal: item.typeLocal,
 
-        valeurFonciere: Number(item.valeurFonciere),
+          surface: Number(item.surface),
 
-        prixM2: Number(item.prixM2),
-      }));
+          pieces: item.pieces ? Number(item.pieces) : 0,
 
+          valeurFonciere: Number(item.valeurFonciere),
+
+          prixM2: Number(item.prixM2),
+        };
+      });
+
+    // =========================
+    // INSERT DB
+    // =========================
     if (batch.length > 0) {
       await prisma.dvfTransaction.createMany({
         data: batch,
+        skipDuplicates: true, // 🔥 IMPORTANT
       });
     }
 
     console.log(`✅ ${Math.min(i + BATCH_SIZE, data.length)}/${data.length}`);
   }
+
+  console.log('====================');
   console.log({
     totalWithoutType,
     totalWithoutSurface,
     totalWithoutDate,
+    skipped,
   });
-  console.log(`⚠️ Lignes ignorées : ${skipped}`);
-
   console.log('🎉 Import DVF terminé');
 
   await prisma.$disconnect();
 }
 
-importDvf().catch((error) => {
+importDvf().catch(async (error) => {
   console.error(error);
-
-  prisma.$disconnect();
+  await prisma.$disconnect();
 });
