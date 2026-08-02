@@ -1,20 +1,21 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
   Query,
-  UseGuards,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AnalysesService } from './analyses.service';
 import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { UpdateAnalysisDto } from './dto/update-analysis.dto';
 import { CreateManualAnalysisDto } from './dto/create-manual-analysis.dto';
+import { AnalysisStatus } from '@prisma/client';
 
 @Controller('analyses')
 export class AnalysesController {
@@ -32,6 +33,15 @@ export class AnalysesController {
     return this.analysesService.createManual(dto, req.user.sub);
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @Post('extension')
+  async analyzeExtension(@Body() body: { url: string }, @Req() req) {
+    console.log('USER EXTENSION:', req.user);
+
+    return this.analysesService.createExtension(body.url, req.user.sub);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get(':id/status')
   getStatus(@Param('id') id: string) {
     return this.analysesService.getStatus(id);
@@ -39,11 +49,17 @@ export class AnalysesController {
 
   @Get()
   @UseGuards(AuthGuard('jwt'))
-  findAll(@Req() req, @Query('page') page = '1', @Query('limit') limit = '10') {
+  findAll(
+    @Req() req,
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+    @Query('status') status?: AnalysisStatus,
+  ) {
     return this.analysesService.findAll(
       req.user.sub,
       Number(page),
       Number(limit),
+      status,
     );
   }
 

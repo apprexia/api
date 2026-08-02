@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AnalysisStatus" ADD VALUE 'UNSUPPORTED_PROPERTY_TYPE';

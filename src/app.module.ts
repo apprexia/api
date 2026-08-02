@@ -12,10 +12,18 @@ import { CreditsModule } from './credits/credits.module';
 import { StripeModule } from './stripe/stripe.module';
 import { DvfModule } from './dvf/dvf.module';
 import { AnalysisMarketService } from './analysis-market/analysis-market.service';
+import { ApprexiaEngineModule } from './apprexia-engine/apprexia-engine.module';
+import { RentalMarketModule } from './rental-market/rental-market.module';
+import { ReportService } from './report/report.service';
+import { ReportModule } from './report/report.module';
+import { HttpModule } from '@nestjs/axios';
+import { LocationProviderService } from './apprexia-engine/providers/location-provider/location-provider.service';
+import { CommuneIndicatorModule } from './commune-indicator/commune-indicator.module';
 
 @Module({
   imports: [
     PrismaModule,
+    HttpModule,
     UsersModule,
     AuthModule,
     AnalysesModule,
@@ -23,8 +31,18 @@ import { AnalysisMarketService } from './analysis-market/analysis-market.service
     CreditsModule,
     StripeModule,
     DvfModule,
+    ApprexiaEngineModule,
+    RentalMarketModule,
+    ReportModule,
+    CommuneIndicatorModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService],
+  providers: [
+    AppService,
+    AnalysesAiService,
+    OpenaiService,
+    AnalysisMarketService,
+    ReportService,
+  ],
 })
 export class AppModule {}

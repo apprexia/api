@@ -185,10 +185,10 @@ export class DvfService {
     // -------------------------------------------------
     // Fourchette basée sur le marché
     // -------------------------------------------------
+    const baseValue = adjustedPriceM2 * surface;
+    const lowEstimate = baseValue * 0.85;
 
-    const lowEstimate = q1 * surface;
-
-    const highEstimate = q3 * surface;
+    const highEstimate = baseValue * 1.25;
 
     // -------------------------------------------------
     // Confiance
@@ -207,24 +207,29 @@ export class DvfService {
 
     return {
       count: prices.length,
-
       averagePriceM2: Math.round(average),
-
       medianPriceM2: Math.round(median),
-
       adjustedPriceM2: Math.round(adjustedPriceM2),
-
       dvfReferenceValue: Math.round(dvfReferenceValue),
-
       lowEstimate: Math.round(lowEstimate),
-
       highEstimate: Math.round(highEstimate),
-
       confidence,
-
       q1: Math.round(q1),
       q3: Math.round(q3),
     };
+  }
+
+  async findCityByPostalCode(codePostal: string) {
+    const result = await this.prisma.dvfTransaction.findFirst({
+      where: {
+        codePostal,
+      },
+      select: {
+        city: true,
+      },
+    });
+
+    return result?.city ?? null;
   }
 
   private normalizeCommune(city: string, codePostal?: string): string {

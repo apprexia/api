@@ -64,9 +64,12 @@ model Analysis {
   codePostal String?
   dvfKey     String?
 
-  rooms   Int?
-  surface Float?
-
+  codeInsee        String?
+  communeContext   Json?
+  communeAnalysis  Json?
+  rooms            Int?
+  surface          Float?
+  terrain          Float?
   score            Int?
   scoreExplanation String?
 
@@ -88,11 +91,22 @@ model Analysis {
   marketPosition   String?
   marketAdjustment String?
 
+  location  Json?
+  amenities Json?
   riskLevel Int?
 
   grossYield    Float?
   yieldLevel    String?
   yieldAnalysis String?
+
+  estimatedRentMonthly Float?
+  estimatedRentLow     Float?
+  estimatedRentHigh    Float?
+  rentPerSquareMeter   Float?
+  rentConfidence       Float?
+
+  monthlyCashflow Float?
+  annualCashflow  Float?
 
   description String?
   imageUrl    String?
@@ -100,10 +114,15 @@ model Analysis {
   strengths String[]
   risks     String[]
 
+  analysisConfidence Float?
+  engine             Json?
+
   createdAt DateTime @default(now())
 
-  user     User       @relation(fields: [userId], references: [id])
-  Favorite Favorite[]
+  user                      User              @relation(fields: [userId], references: [id])
+  Favorite                  Favorite[]
+  communeIndicator          CommuneIndicator? @relation(fields: [communeIndicatorCodeInsee], references: [codeInsee])
+  communeIndicatorCodeInsee String?
 
   @@index([city])
   @@index([codePostal])
@@ -118,6 +137,7 @@ enum AnalysisStatus {
   COMPLETED
   AI_FAILED
   INSUFFICIENT_DATA
+  UNSUPPORTED_PROPERTY_TYPE
 }
 
 model Favorite {
@@ -125,8 +145,9 @@ model Favorite {
   userId     String
   analysisId String
   createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
-  analysis   Analysis @relation(fields: [analysisId], references: [id])
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
 
   @@unique([userId, analysisId])
 }
@@ -152,4 +173,90 @@ model DvfTransaction {
   @@index([city, codePostal])
   @@index([year, city])
   @@index([year, city, typeLocal])
+}
+
+model RentalMarket {
+  id               Int            @id @default(autoincrement())
+  zoneId           Int?
+  year             Int
+  inseeCode        String
+  city             String
+  departmentCode   String
+  regionCode       String
+  propertyType     PropertyType
+  roomCategory     RoomCategory
+  rentMedianM2     Float
+  rentLowM2        Float
+  rentHighM2       Float
+  predictionType   PredictionType
+  observations     Int
+  observationsArea Int
+  adjustedR2       Float
+  createdAt        DateTime       @default(now())
+
+  @@unique([year, inseeCode, propertyType, roomCategory])
+  @@index([inseeCode])
+  @@index([city])
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+}
+
+enum RoomCategory {
+  ALL
+  ONE_TWO
+  THREE_PLUS
+}
+
+enum PredictionType {
+  COMMUNE
+  MAILLE
+}
+
+model CommuneIndicator {
+  codeInsee       String  @id
+  commune         String
+  codeDepartement String?
+  region          String?
+
+  // Population
+  population                Int?
+  evolutionPopulation5Years Float?
+
+  // Immobilier commune
+  medianPriceM2          Float?
+  medianHousePriceM2     Float?
+  medianApartmentPriceM2 Float?
+  dvfTransactions        Int?
+  priceEvolution5Years   Float?
+
+  // Energie
+  dpeAB        Float?
+  passoiresDpe Float?
+
+  // Services
+  schoolIndex   Float?
+  fiberCoverage Float?
+  doctorAccess  Float?
+
+  // Risques
+  icpeSurface   Float?
+  sevesoSurface Float?
+  floodRisk     Float?
+
+  // Fiscalité
+  propertyTaxRate Float?
+  propertyTaxM2   Float?
+
+  // Score calculé plus tard
+  localScore Float?
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  Analysis  Analysis[]
+
+  @@index([commune])
+  @@index([codeDepartement])
 }

@@ -11,8 +11,9 @@ export class AnalysisMarketService {
     codePostal?: string;
     typeLocal: string;
     surface: number;
+    terrain: number;
   }) {
-    const { city, codePostal, typeLocal, surface } = params;
+    const { city, codePostal, typeLocal, surface, terrain } = params;
 
     const normalizedCity = this.normalizeCommune(city, codePostal);
 
@@ -40,6 +41,13 @@ export class AnalysisMarketService {
         gte: minSurface,
         lte: maxSurface,
       },
+
+      ...(terrain && {
+        terrain: {
+          gte: terrain * 0.5,
+          lte: terrain * 1.5,
+        },
+      }),
 
       verdict: {
         not: 'ERROR',

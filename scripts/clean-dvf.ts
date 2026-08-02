@@ -33,10 +33,13 @@ function normalizeCity(city?: string): string {
   return city
     .toUpperCase()
     .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '') // enlève accents
-    .replace(/[^A-Z\s-]/g, '') // enlève chiffres / symbols
-    .replace(/\s+/g, ' ') // espace propre
-    .trim();
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/['’]/g, ' ')
+    .replace(/[^A-Z\s-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 }
 
 // =========================
@@ -52,11 +55,15 @@ function normalizeCity(city?: string): string {
 function normalizeMajorCities(city: string, postalCode?: string) {
   const cp = normalizePostalCode(postalCode);
 
-  if (!cp) return normalizeCity(city);
+  if (!cp) {
+    return normalizeCity(city);
+  }
 
   if (cp.startsWith('75')) return 'PARIS';
-  if (cp.startsWith('69')) return 'LYON';
-  if (cp.startsWith('13')) return 'MARSEILLE';
+
+  // uniquement Lyon intra-muros si tu veux
+  // attention : le Rhône contient beaucoup d'autres communes
+  if (cp.startsWith('6900')) return 'LYON';
 
   return normalizeCity(city);
 }
@@ -64,7 +71,7 @@ function normalizeMajorCities(city: string, postalCode?: string) {
 // =========================
 // PARSING DATASET DVF
 // =========================
-fs.createReadStream('./data/dvf-raw.txt')
+fs.createReadStream('./scripts/data/dvf-2023.txt')
   .pipe(
     csv({
       separator: '|',
@@ -170,7 +177,7 @@ fs.createReadStream('./data/dvf-raw.txt')
           : 0,
     }));
 
-    fs.writeFileSync('./data/dvf-clean.json', JSON.stringify(results, null, 2));
+    fs.writeFileSync('./scripts/data/dvf-clean.json', JSON.stringify(results, null, 2));
 
     // =========================
     // LOG QUALITÉ DATASET

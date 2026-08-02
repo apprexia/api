@@ -13,7 +13,7 @@ function isValidDate(date: any): boolean {
 }
 
 async function importDvf() {
-  const file = fs.readFileSync('./data/dvf-clean.json', 'utf8');
+  const file = fs.readFileSync('./scripts/data/dvf-clean.json', 'utf8');
   const data = JSON.parse(file);
 
   console.log(`📦 ${data.length} lignes à importer`);
