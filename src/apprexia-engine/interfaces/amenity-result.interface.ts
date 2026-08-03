@@ -1,12 +1,11 @@
 export interface AmenityResult {
-  score: number;
+    score: number;
 
-  level:
-    'Premium' | 'Très bon' | 'Bon' | 'Correct' | 'Faible' | 'Non renseigné';
+    level: 'Premium' | 'Très bon' | 'Bon' | 'Correct' | 'Faible' | 'Non renseigné';
 
-  highlights: {
-    label: string;
-    icon: string;
-    points: number;
-  }[];
+    highlights: {
+        label: string;
+        icon: string;
+        points: number;
+    }[];
 }

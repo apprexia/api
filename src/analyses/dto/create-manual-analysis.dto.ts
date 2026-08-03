@@ -1,28 +1,28 @@
 import { PropertyFeatures } from '../../services/meta-data-scrapper/interfaces/property-features.interface';
 
 export class CreateManualAnalysisDto {
-  adresse: string;
-  ville: string;
-  codePostal: string;
+    adresse: string;
+    ville: string;
+    codePostal: string;
 
-  latitude: number;
-  longitude: number;
+    latitude: number;
+    longitude: number;
 
-  typeLocal: 'Maison' | 'Appartement';
+    typeLocal: 'Maison' | 'Appartement';
 
-  surface: number;
-  terrain?: number;
+    surface: number;
+    terrain?: number;
 
-  pieces: number;
+    pieces: number;
 
-  etat: string;
-  etage?: number;
+    etat: string;
+    etage?: number;
 
-  dpe: string;
+    dpe: string;
 
-  propertyFeatures: PropertyFeatures;
+    propertyFeatures: PropertyFeatures;
 
-  sourceSite: string;
+    sourceSite: string;
 
-  prix: number;
+    prix: number;
 }

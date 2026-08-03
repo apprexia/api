@@ -260,3 +260,21 @@ model CommuneIndicator {
   @@index([commune])
   @@index([codeDepartement])
 }
+
+model LocationCache {
+  id String @id @default(uuid())
+
+  city       String
+  codePostal String
+  radius     Int
+
+  latitude  Float
+  longitude Float
+
+  data Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([city, codePostal, radius])
+}

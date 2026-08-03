@@ -1,11 +1,11 @@
-import { AmenityScoreResult } from '../engines/amenity-engine/amenity-engine.service';
+import { AmenityResult } from './amenity-result.interface';
 
 export interface ScoreResult {
-  score: number;
-  opportunityScore: number;
-  riskScore: number;
-  yieldScore: number;
-  amenitiesScore: AmenityScoreResult;
-  confidenceScore: number;
-  liquidityScore: number;
+    score: number;
+    opportunityScore: number;
+    riskScore: number;
+    yieldScore: number;
+    amenitiesScore: AmenityResult;
+    confidenceScore: number;
+    liquidityScore: number;
 }

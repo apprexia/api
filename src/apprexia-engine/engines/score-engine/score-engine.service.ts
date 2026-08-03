@@ -9,95 +9,90 @@ import { LiquidityEngineService } from '../liquidity-engine/liquidity-engine.ser
 
 @Injectable()
 export class ScoreEngineService {
-  constructor(
-    private readonly yieldEngine: YieldEngineService,
-    private readonly confidenceEngine: ConfidenceEngineService,
-    private readonly opportunityEngine: OpportunityEngineService,
-    private readonly amenityEngine: AmenityEngineService,
-    private readonly liquidityEngine: LiquidityEngineService,
-  ) {}
+    constructor(
+        private readonly yieldEngine: YieldEngineService,
+        private readonly confidenceEngine: ConfidenceEngineService,
+        private readonly opportunityEngine: OpportunityEngineService,
+        private readonly amenityEngine: AmenityEngineService,
+        private readonly liquidityEngine: LiquidityEngineService,
+    ) {}
 
-  compute(context: EngineContext): ScoreResult {
-    const analysis = context.analysis;
+    compute(context: EngineContext): ScoreResult {
+        const analysis = context.analysis;
 
-    // ======================================================
-    // 1. OPPORTUNITÉ PRIX (40 pts)
-    // ======================================================
+        // ======================================================
+        // 1. OPPORTUNITÉ PRIX (40 pts)
+        // ======================================================
 
-    const opportunityScore = this.opportunityEngine.compute(
-      analysis.askingPrice,
-      analysis.estimatedValueLow,
-      analysis.estimatedValueHigh,
-      analysis.dvfReferenceValue,
-    );
+        const opportunityScore = this.opportunityEngine.compute(
+            analysis.askingPrice,
+            analysis.estimatedValueLow,
+            analysis.estimatedValueHigh,
+            analysis.dvfReferenceValue,
+        );
 
-    // ======================================================
-    // 2. RISQUE (20 pts)
-    // ======================================================
+        // ======================================================
+        // 2. RISQUE (20 pts)
+        // ======================================================
 
-    const riskScore = Math.round(Math.max(0, (100 - analysis.riskLevel) / 5));
+        const riskScore = Math.round(Math.max(0, (100 - analysis.riskLevel) / 5));
 
-    // ======================================================
-    // 3. RENDEMENT LOCATIF (15 pts)
-    // ======================================================
+        // ======================================================
+        // 3. RENDEMENT LOCATIF (15 pts)
+        // ======================================================
 
-    const yieldScore = this.yieldEngine.compute(
-      analysis.grossYield,
-      analysis.city,
-    );
+        const yieldScore = this.yieldEngine.compute(analysis.grossYield, analysis.city);
 
-    // ======================================================
-    // 4. PRESTATIONS (10 pts)
-    // ======================================================
+        // ======================================================
+        // 4. PRESTATIONS (10 pts)
+        // ======================================================
 
-    const amenitiesScore = this.amenityEngine.compute(
-      analysis.propertyFeatures,
-      analysis.surface,
-    );
+        const amenitiesResult = this.amenityEngine.compute(analysis.propertyFeatures, analysis.surface);
 
-    // ======================================================
-    // 5. CONFIANCE DATA (10 pts)
-    // ======================================================
+        // Conversion Amenity /100 => /10
+        const amenitiesScore = Math.round((amenitiesResult.score / 100) * 10);
 
-    const confidenceScore = this.confidenceEngine.compute(
-      context.dvf,
-      context.apprexia,
-    );
+        // ======================================================
+        // 5. CONFIANCE DATA (10 pts)
+        // ======================================================
 
-    // ======================================================
-    // 6. LIQUIDITÉ (5 pts)
-    // ======================================================
+        const confidenceScore = this.confidenceEngine.compute(context.dvf, context.apprexia);
 
-    const liquidityScore = this.liquidityEngine.compute(
-      context.dvf?.count ?? 0,
-      analysis.city,
-      analysis.surface,
-    );
+        // ======================================================
+        // 6. LIQUIDITÉ (5 pts)
+        // ======================================================
 
-    // ======================================================
-    // SCORE FINAL
-    // ======================================================
+        const liquidityRaw = this.liquidityEngine.compute(context.dvf?.count ?? 0, analysis.city, analysis.surface);
 
-    const score = Math.min(
-      100,
-      Math.round(
-        opportunityScore +
-          riskScore +
-          yieldScore +
-          amenitiesScore.score +
-          confidenceScore +
-          liquidityScore,
-      ),
-    );
+        // Conversion Liquidity /20 => /5
+        const liquidityScore = Math.round((liquidityRaw / 20) * 5);
 
-    return {
-      score,
-      opportunityScore,
-      riskScore,
-      yieldScore,
-      amenitiesScore,
-      confidenceScore,
-      liquidityScore,
-    };
-  }
+        // ======================================================
+        // SCORE FINAL
+        // ======================================================
+
+        const score = Math.min(
+            100,
+            Math.round(opportunityScore + riskScore + yieldScore + amenitiesScore + confidenceScore + liquidityScore),
+        );
+
+        return {
+            score,
+
+            opportunityScore,
+
+            riskScore,
+
+            yieldScore,
+
+            amenitiesScore: {
+                ...amenitiesResult,
+                score: amenitiesResult.score,
+            },
+
+            confidenceScore,
+
+            liquidityScore,
+        };
+    }
 }

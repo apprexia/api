@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ListingMetadata } from '../meta-data-scrapper/meta-data-scrapper.service';
 import { ApprexiaMarketData } from '../../analyses/interfaces/apprexia-market-data.interface';
@@ -6,23 +6,26 @@ import { DvfMarketData } from '../../analyses/interfaces/dvf-market-data.interfa
 import { RentalResult } from '../../analyses/interfaces/rental-result.interface';
 import { LocationAnalysis } from '../../apprexia-engine/interfaces/location-analysis.interface';
 import { CommuneIndicator } from '@prisma/client';
+import { PropertyFeatures } from '../meta-data-scrapper/interfaces/property-features.interface';
 
 @Injectable()
 export class OpenaiService {
-  private client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+    private readonly logger = new Logger();
 
-  async analyze(
-    metadata: ListingMetadata,
-    marketData?: DvfMarketData | null,
-    apprexiaMarketData?: ApprexiaMarketData | null,
-    rentalData?: RentalResult | null,
-    locationAnalysis?: LocationAnalysis | null,
-    communeIndicator?: CommuneIndicator | null,
-  ) {
-    const apprexiaInfo = apprexiaMarketData
-      ? `
+    private openAI = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    async analyze(
+        metadata: ListingMetadata,
+        marketData?: DvfMarketData | null,
+        apprexiaMarketData?: ApprexiaMarketData | null,
+        rentalData?: RentalResult | null,
+        locationAnalysis?: LocationAnalysis | null,
+        communeIndicator?: CommuneIndicator | null,
+    ) {
+        const apprexiaInfo = apprexiaMarketData
+            ? `
 
 DONNÉES APPREXIA
 (Analyses historiques de biens similaires)
@@ -82,16 +85,14 @@ Elles servent à comparer :
 Apprexia complète la DVF mais ne la remplace pas.
 
 `
-      : `
+            : `
 DONNÉES APPREXIA :
 
 Aucune analyse historique disponible.
 `;
-    const priceAnalysis = marketData
-      ? this.calculatePriceGap(Number(metadata.price), marketData)
-      : null;
-    const marketInfo = marketData
-      ? `
+        const priceAnalysis = marketData ? this.calculatePriceGap(Number(metadata.price), marketData) : null;
+        const marketInfo = marketData
+            ? `
 
 DONNÉES DVF
 (Ventes immobilières réellement enregistrées)
@@ -265,7 +266,7 @@ Une négociation importante peut être nécessaire mais difficile à obtenir.
 
 Explique cette différence dans negotiationAnalysis.
 `
-      : `
+            : `
 
 DONNÉES DVF :
 
@@ -288,8 +289,8 @@ Explique simplement que l'estimation est impossible faute de données de marché
 
 `;
 
-    const rentalInfo = rentalData
-      ? `
+        const rentalInfo = rentalData
+            ? `
 
 DONNÉES RENTAL ENGINE
 (Estimation locative)
@@ -308,19 +309,11 @@ ${rentalData.estimatedRentHigh} €
 
 
 Prix au m² locatif :
-${
-  rentalData?.rentPerSquareMeter != null
-    ? rentalData.rentPerSquareMeter.toFixed(2)
-    : 'N/A'
-} €/m²
+${rentalData?.rentPerSquareMeter != null ? rentalData.rentPerSquareMeter.toFixed(2) : 'N/A'} €/m²
 
 
 Confiance estimation :
-${
-  rentalData.rentConfidence !== null
-    ? Math.round(rentalData.rentConfidence)
-    : 'N/A'
-} %
+${rentalData.rentConfidence !== null ? Math.round(rentalData.rentConfidence) : 'N/A'} %
 
 
 Rendement brut calculé :
@@ -340,14 +333,14 @@ Ne recalcule jamais le loyer.
 Ne modifie jamais grossYield.
 
 `
-      : `
+            : `
 DONNÉES RENTAL :
 
 Aucune estimation locative disponible.
 `;
 
-    const locationInfo = locationAnalysis
-      ? `
+        const locationInfo = locationAnalysis
+            ? `
 DONNÉES LOCATION ENGINE
 (Analyse automatique de l'environnement)
 
@@ -385,14 +378,14 @@ Elles ne modifient jamais :
 - dvfReferenceValue
 
 `
-      : `
+            : `
 DONNÉES LOCATION ENGINE :
 
 Aucune analyse de localisation disponible.
 `;
 
-    const communeInfo = communeIndicator
-      ? `
+        const communeInfo = communeIndicator
+            ? `
 DONNÉES COMMUNE
 (Contexte démographique et économique local)
 
@@ -400,46 +393,22 @@ Ville :
 ${communeIndicator.commune ?? ''}
 
 Evolution prix immobilier 5 ans :
-${
-  communeIndicator.priceEvolution5Years !== null
-    ? `${communeIndicator.priceEvolution5Years}%`
-    : 'N/A'
-}
+${communeIndicator.priceEvolution5Years !== null ? `${communeIndicator.priceEvolution5Years}%` : 'N/A'}
 
 Prix appartement :
-${
-  communeIndicator.medianApartmentPriceM2 !== null
-    ? `${communeIndicator.medianApartmentPriceM2} €/m²`
-    : 'N/A'
-}
+${communeIndicator.medianApartmentPriceM2 !== null ? `${communeIndicator.medianApartmentPriceM2} €/m²` : 'N/A'}
 
 Prix immobilier médian :
-${
-  communeIndicator.medianPriceM2 !== null
-    ? `${communeIndicator.medianPriceM2} €/m²`
-    : 'N/A'
-}
+${communeIndicator.medianPriceM2 !== null ? `${communeIndicator.medianPriceM2} €/m²` : 'N/A'}
 
 Evolution population 5 ans :
-${
-  communeIndicator.evolutionPopulation5Years !== null
-    ? `${communeIndicator.evolutionPopulation5Years}%`
-    : 'N/A'
-}
+${communeIndicator.evolutionPopulation5Years !== null ? `${communeIndicator.evolutionPopulation5Years}%` : 'N/A'}
 
 Score écoles :
-${
-  communeIndicator.schoolIndex !== null
-    ? `${communeIndicator.schoolIndex}/100`
-    : 'N/A'
-}
+${communeIndicator.schoolIndex !== null ? `${communeIndicator.schoolIndex}/100` : 'N/A'}
 
 Fiscalité taxe foncière :
-${
-  communeIndicator.propertyTaxRate !== null
-    ? `${communeIndicator.propertyTaxRate}%`
-    : 'N/A'
-}
+${communeIndicator.propertyTaxRate !== null ? `${communeIndicator.propertyTaxRate}%` : 'N/A'}
 
 IMPORTANT :
 
@@ -464,16 +433,16 @@ Elles peuvent influencer :
 
 Elles ne doivent jamais créer une information absente de l'annonce.
 `
-      : `
+            : `
 DONNÉES COMMUNE :
 
 Aucune donnée locale disponible.
 `;
 
-    const response = await this.client.responses.create({
-      model: 'gpt-4.1-mini',
+        const response = await this.openAI.responses.create({
+            model: 'gpt-4.1-mini',
 
-      input: `
+            input: `
 Tu es un expert immobilier spécialisé dans l'investissement locatif en France.
 
 Ton rôle est de produire une analyse immobilière professionnelle comparable à celle d'un expert immobilier.
@@ -514,8 +483,8 @@ PRESTATIONS DÉTECTÉES
 ──────────────────────────────
 
 ${
-  metadata.propertyFeatures
-    ? `
+    metadata.propertyFeatures
+        ? `
 Les éléments ci-dessous correspondent uniquement aux prestations détectées explicitement dans l'annonce.
 
 IMPORTANT :
@@ -569,7 +538,7 @@ Rénové : ${metadata.propertyFeatures.renove ? 'Oui' : 'Non détecté'}
 Standing : ${metadata.propertyFeatures.standing ? 'Oui' : 'Non détecté'}
 Prestige : ${metadata.propertyFeatures.prestige ? 'Oui' : 'Non détecté'}
 `
-    : 'Aucune prestation détectée'
+        : 'Aucune prestation détectée'
 }
 
 Les prestations détectées ci-dessus représentent uniquement
@@ -1628,51 +1597,447 @@ Ne retourne jamais de markdown.
 
 Ne retourne jamais de texte avant ou après le JSON.
 `,
-    });
-    console.log('OPENAI RAW RESPONSE');
-    console.log(response.output_text);
-    return response.output_text;
-  }
+        });
+        return response.output_text;
+    }
 
-  private calculatePriceGap(askingPrice: number, marketData: DvfMarketData) {
-    const { dvfReferenceValue, lowEstimate, highEstimate } = marketData;
+    private calculatePriceGap(askingPrice: number, marketData: DvfMarketData) {
+        const { dvfReferenceValue, lowEstimate, highEstimate } = marketData;
 
-    const gapVsDvf =
-      ((askingPrice - dvfReferenceValue) / dvfReferenceValue) * 100;
+        const gapVsDvf = ((askingPrice - dvfReferenceValue) / dvfReferenceValue) * 100;
 
-    const gapVsLow = ((askingPrice - lowEstimate) / lowEstimate) * 100;
+        const gapVsLow = ((askingPrice - lowEstimate) / lowEstimate) * 100;
 
-    const gapVsHigh = ((askingPrice - highEstimate) / highEstimate) * 100;
+        const gapVsHigh = ((askingPrice - highEstimate) / highEstimate) * 100;
 
-    return {
-      askingPrice,
+        return {
+            askingPrice,
 
-      dvfReferenceValue,
+            dvfReferenceValue,
 
-      lowEstimate,
+            lowEstimate,
 
-      highEstimate,
+            highEstimate,
 
-      // écart absolu
-      amountVsDvf: askingPrice - dvfReferenceValue,
+            // écart absolu
+            amountVsDvf: askingPrice - dvfReferenceValue,
 
-      amountVsLow: askingPrice - lowEstimate,
+            amountVsLow: askingPrice - lowEstimate,
 
-      amountVsHigh: askingPrice - highEstimate,
+            amountVsHigh: askingPrice - highEstimate,
 
-      // écart %
-      gapVsDvfPercent: Number(gapVsDvf.toFixed(2)),
+            // écart %
+            gapVsDvfPercent: Number(gapVsDvf.toFixed(2)),
 
-      gapVsLowPercent: Number(gapVsLow.toFixed(2)),
+            gapVsLowPercent: Number(gapVsLow.toFixed(2)),
 
-      gapVsHighPercent: Number(gapVsHigh.toFixed(2)),
+            gapVsHighPercent: Number(gapVsHigh.toFixed(2)),
 
-      position:
-        askingPrice < lowEstimate
-          ? 'SOUS_EVALUE'
-          : askingPrice <= highEstimate
-            ? 'DANS_FOURCHETTE'
-            : 'AU_DESSUS_FOURCHETTE',
-    };
-  }
+            position:
+                askingPrice < lowEstimate
+                    ? 'SOUS_EVALUE'
+                    : askingPrice <= highEstimate
+                      ? 'DANS_FOURCHETTE'
+                      : 'AU_DESSUS_FOURCHETTE',
+        };
+    }
+
+    async verifyExtractedMetadata(input: {
+        url?: string;
+        title: string;
+        description: string;
+        body?: string;
+
+        extracted: {
+            address?: string;
+            streetAddress?: string;
+            city?: string;
+            codePostal?: string;
+
+            typeLocal?: ListingMetadata['typeLocal'];
+            surface?: number;
+            terrain?: number;
+            rooms?: number;
+
+            propertyFeatures?: PropertyFeatures;
+
+            price?: number;
+        };
+    }): Promise<{
+        address: string;
+        streetAddress?: string;
+        city?: string;
+        codePostal?: string;
+
+        typeLocal?: ListingMetadata['typeLocal'];
+        surface?: number;
+        terrain?: number;
+        rooms?: number;
+
+        propertyFeatures?: PropertyFeatures;
+
+        price?: number;
+
+        corrected: boolean;
+        confidence: number;
+        reason?: string;
+    }> {
+        const prompt = `
+Tu es un expert immobilier français spécialisé dans la validation des métadonnées extraites automatiquement depuis des annonces immobilières.
+
+Les informations fournies proviennent d'extracteurs automatiques.
+Elles sont généralement correctes mais peuvent contenir des erreurs.
+
+Ton rôle n'est PAS de tout réextraire.
+Tu dois uniquement vérifier la cohérence des données extraites avec l'annonce et corriger uniquement lorsqu'une preuve explicite existe.
+
+RÈGLES IMPORTANTES :
+
+- Analyse uniquement les informations présentes dans l'annonce.
+- Ne jamais inventer une information absente.
+- Si une valeur semble correcte ou qu'il existe un doute, conserve la valeur extraite.
+- Ne crée jamais d'adresse, code postal ou surface sans preuve.
+- Ne modifie jamais un prix sauf erreur manifeste.
+- Une ville citée comme "proche de", "à côté de", "à 10 minutes de" n'est pas forcément la commune du bien.
+- Ignore les équipements proposés "en option", "en sus", "possibilité d'acquérir".
+- Ne transforme jamais une option en caractéristique du bien.
+
+TYPE DE BIEN :
+
+- Vérifie que le typeLocal correspond réellement au bien vendu.
+- Exemple :
+  "Appartement avec possibilité d'acquérir une place de parking"
+  => typeLocal = "Appartement"
+
+NORMALISATION COMMUNE :
+
+- Toujours retourner la commune en MAJUSCULES.
+- Utiliser des tirets pour les noms composés.
+- Ne jamais utiliser d'abréviation.
+
+Exemples :
+
+"Bussy-Saint-Georges" => "BUSSY-SAINT-GEORGES"
+"Saint-Raphaël" => "SAINT-RAPHAEL"
+"Aix-en-Provence" => "AIX-EN-PROVENCE"
+
+URL :
+
+${input.url ?? ''}
+
+TITRE :
+
+${input.title}
+
+DESCRIPTION :
+
+${input.description}
+
+CONTENU COMPLET :
+
+${input.body?.substring(0, 4000) ?? ''}
+
+
+DONNÉES EXTRAITES AUTOMATIQUEMENT :
+
+${JSON.stringify(
+    {
+        address: input.extracted.address ?? '',
+        streetAddress: input.extracted.streetAddress ?? '',
+        city: this.normalizeCity(input.extracted.city),
+        codePostal: input.extracted.codePostal ?? '',
+
+        typeLocal: input.extracted.typeLocal,
+
+        surface: input.extracted.surface,
+        terrain: input.extracted.terrain,
+
+        rooms: input.extracted.rooms,
+
+        propertyFeatures: input.extracted.propertyFeatures,
+
+        price: input.extracted.price,
+    },
+    null,
+    2,
+)}
+
+
+MISSION :
+
+1. Vérifier la localisation.
+2. Vérifier le typeLocal.
+3. Vérifier la surface.
+4. Vérifier le terrain.
+5. Vérifier le nombre de pièces.
+6. Vérifier les équipements.
+7. Vérifier le prix.
+8. Corriger uniquement les erreurs certaines.
+9. Retourner uniquement un JSON valide.
+
+
+FORMAT OBLIGATOIRE :
+
+{
+  "location": {
+    "address": "",
+    "streetAddress": "",
+    "city": "",
+    "codePostal": ""
+  },
+  "typeLocal": "",
+  "surface": 0,
+  "terrain": 0,
+  "rooms": 0,
+  "price": 0,
+  "propertyFeatures": {},
+  "corrected": false,
+  "confidence": 0,
+  "reason": ""
+}
+
+
+SIGNIFICATION :
+
+location :
+Localisation réelle du bien.
+- Retourner uniquement une localisation explicitement présente dans l'annonce.
+- Ne jamais utiliser une ville simplement citée comme proche ou voisine.
+
+typeLocal :
+Type principal réel du bien vendu.
+
+Valeurs autorisées uniquement :
+- Appartement
+- Maison
+- Terrain
+- Local commercial
+- Parking
+- Immeuble
+- Inconnu
+
+Règles de normalisation :
+- Studio, T1, T2, T3, F1, F2, F3, loft habitable → Appartement
+- Villa, pavillon, maison individuelle → Maison
+- Parcelle, terrain constructible → Terrain
+- Garage, emplacement de stationnement, box vendu seul → Parking
+
+Ne jamais retourner "Studio", "T1", "T2", "F2" ou une autre sous-catégorie dans typeLocal.
+
+RÈGLES DE NORMALISATION DU TYPE :
+
+- Studio, T1, T2, T3, T4, appartement ancien, appartement neuf => "Appartement"
+- Maison, villa, pavillon => "Maison"
+- Terrain constructible ou terrain nu => "Terrain"
+- Parking, box, garage vendu seul => "Parking"
+- Local commercial, boutique, commerce => "Local commercial"
+- Immeuble entier => "Immeuble"
+
+Attention :
+- Un parking mentionné comme "en option", "en sus", "possibilité d'acquérir" ou "à vendre séparément" ne doit jamais modifier le typeLocal.
+- Exemple :
+  "Appartement avec possibilité d'acquérir une place de parking"
+  => typeLocal = "Appartement"
+
+surface :
+Surface habitable du bien principal vendu.
+- Ne pas utiliser la surface d'un terrain, jardin ou extérieur comme surface habitable.
+- Exemple :
+  Appartement 32 m² avec jardin 200 m²
+  => surface = 32
+  => terrain = 200
+
+terrain :
+Surface extérieure privative liée au bien.
+- Jardin, terrain, parcelle, espace extérieur privatif.
+- Ne pas confondre avec terrasse ou balcon.
+
+RÈGLES SUR LES SURFACES EXTÉRIEURES :
+
+- Un jardin privatif d'appartement n'est jamais un terrain.
+- Une terrasse, un balcon, une cour ou un jardin ne doivent jamais être retournés dans le champ terrain.
+- Le champ terrain doit être renseigné uniquement si l'annonce indique une parcelle de terrain, un terrain constructible ou une maison avec une surface de terrain. 
+
+rooms :
+Nombre de pièces principales du logement.
+- Un studio correspond généralement à 1 pièce.
+
+propertyFeatures :
+Équipements et caractéristiques réellement présents dans le bien.
+
+Règles importantes :
+- Ne jamais considérer une option comme un équipement acquis.
+- "Possibilité d'acquérir un parking" => parking=false.
+- "Terrasse de 20 m²" => terrasse=true.
+- "Jardin privatif" => jardin=true.
+- Les termes marketing comme "coup de cœur", "charme", "privilégié" ne suffisent pas pour prestige.
+
+prestige=true uniquement si l'annonce mentionne explicitement :
+- bien de prestige
+- résidence prestigieuse
+- luxe
+- haut de gamme
+- standing exceptionnel
+
+corrected :
+true uniquement si une information extraite automatiquement a été modifiée.
+
+confidence :
+Niveau de confiance entre 0 et 1.
+
+reason :
+Explication courte des corrections effectuées.
+
+
+Retourne uniquement le JSON.
+`;
+
+        const response = await this.openAI.chat.completions.create({
+            model: 'gpt-4.1-mini',
+            temperature: 0,
+            response_format: {
+                type: 'json_object',
+            },
+            messages: [
+                {
+                    role: 'system',
+                    content: 'Tu es un expert français de validation de métadonnées immobilières.',
+                },
+                {
+                    role: 'user',
+                    content: prompt,
+                },
+            ],
+        });
+
+        const content = response.choices[0]?.message?.content;
+
+        if (!content) {
+            return {
+                address: input.extracted.address ?? '',
+                streetAddress: input.extracted.streetAddress,
+                city: this.normalizeCity(input.extracted.city),
+                codePostal: input.extracted.codePostal,
+
+                typeLocal: input.extracted.typeLocal,
+
+                surface: input.extracted.surface,
+                terrain: input.extracted.terrain,
+
+                rooms: input.extracted.rooms,
+
+                propertyFeatures: input.extracted.propertyFeatures,
+
+                price: input.extracted.price,
+
+                corrected: false,
+                confidence: 0,
+                reason: 'Aucune réponse OpenAI',
+            };
+        }
+
+        try {
+            const result = JSON.parse(content);
+
+            return {
+                address: result.location?.address ?? input.extracted.address ?? '',
+
+                streetAddress: result.location?.streetAddress ?? input.extracted.streetAddress,
+
+                city: result.location?.city
+                    ? this.normalizeCity(result.location.city)
+                    : this.normalizeCity(input.extracted.city),
+
+                codePostal: result.location?.codePostal ?? input.extracted.codePostal,
+
+                typeLocal: result.typeLocal ?? input.extracted.typeLocal,
+
+                surface: result.surface ?? input.extracted.surface,
+
+                terrain: result.terrain ?? input.extracted.terrain,
+
+                rooms: result.rooms ?? input.extracted.rooms,
+
+                propertyFeatures: result.propertyFeatures ?? input.extracted.propertyFeatures,
+
+                price: result.price ?? input.extracted.price,
+
+                corrected: result.corrected ?? false,
+
+                confidence: result.confidence ?? 0,
+
+                reason: result.reason,
+            };
+        } catch (error) {
+            this.logger.error('Erreur parsing OpenAI verifyExtractedMetadata', error);
+
+            return {
+                address: input.extracted.address ?? '',
+                streetAddress: input.extracted.streetAddress,
+                city: this.normalizeCity(input.extracted.city),
+                codePostal: input.extracted.codePostal,
+
+                typeLocal: input.extracted.typeLocal,
+
+                surface: input.extracted.surface,
+                terrain: input.extracted.terrain,
+
+                rooms: input.extracted.rooms,
+
+                propertyFeatures: input.extracted.propertyFeatures,
+
+                price: input.extracted.price,
+
+                corrected: false,
+                confidence: 0,
+                reason: 'Erreur parsing JSON',
+            };
+        }
+    }
+
+    private normalizeCity(city?: string): string | undefined {
+        if (!city) {
+            return undefined;
+        }
+
+        return (
+            city
+
+                // abréviations communes
+                .replace(/\bST\b/gi, 'SAINT')
+                .replace(/\bSTE\b/gi, 'SAINTE')
+
+                // suppression arrondissements complets
+                .replace(/\b\d{1,2}(?:ER|E|EME|ÈME)?\b/gi, '')
+
+                // suppression suffixe restant après suppression du chiffre
+                .replace(/\b(ER|EME|ÈME|E)\b/gi, '')
+
+                .replace(/\bARRONDISSEMENT\b/gi, '')
+
+                // suppression accents
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+
+                // apostrophes
+                .replace(/['’]/g, ' ')
+
+                // caractères inutiles
+                .replace(/[^A-Za-z\s'-]/g, '')
+
+                // espaces
+                .replace(/\s+/g, ' ')
+                .trim()
+
+                // majuscules
+                .toUpperCase()
+
+                // format DVF
+                .replace(/\s+/g, '-')
+
+                // nettoyage final
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '')
+        );
+    }
 }

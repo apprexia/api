@@ -2,39 +2,70 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class YieldEngineService {
-  compute(grossYield: number | null | undefined, city?: string): number {
-    // Valeur neutre lorsqu'on ne dispose pas de données
-    if (grossYield == null) {
-      return 8;
+    compute(grossYield: number | null | undefined, city?: string): number {
+        if (grossYield == null) {
+            return 8;
+        }
+
+        const marketProfile = this.getMarketProfile(city);
+
+        switch (marketProfile) {
+            case 'PREMIUM':
+                return this.computePremiumYield(grossYield);
+
+            case 'TENSE':
+                return this.computeTenseYield(grossYield);
+
+            default:
+                return this.computeStandardYield(grossYield);
+        }
     }
 
-    const isHighDemandCity =
-      city?.toUpperCase().includes('PARIS') ||
-      city?.toUpperCase().includes('LYON') ||
-      city?.toUpperCase().includes('BORDEAUX');
+    private getMarketProfile(city?: string) {
+        const normalized = city?.toUpperCase() ?? '';
 
-    if (isHighDemandCity) {
-      return this.computeHighDemandYield(grossYield);
+        const premiumCities = ['PARIS', 'LYON', 'BORDEAUX', 'NANTES', 'RENNES', 'ANNECY'];
+
+        const tenseCities = ['TOULOUSE', 'MONTPELLIER', 'LILLE', 'STRASBOURG', 'GRENOBLE', 'NICE'];
+
+        if (premiumCities.some((c) => normalized.includes(c))) {
+            return 'PREMIUM';
+        }
+
+        if (tenseCities.some((c) => normalized.includes(c))) {
+            return 'TENSE';
+        }
+
+        return 'STANDARD';
     }
 
-    return this.computeStandardYield(grossYield);
-  }
+    // Marchés patrimoniaux
+    private computePremiumYield(yieldValue: number) {
+        if (yieldValue >= 6) return 15;
+        if (yieldValue >= 5) return 13;
+        if (yieldValue >= 4) return 11;
+        if (yieldValue >= 3) return 8;
 
-  private computeHighDemandYield(grossYield: number): number {
-    if (grossYield >= 5) return 15;
-    if (grossYield >= 4) return 12;
-    if (grossYield >= 3) return 9;
-    if (grossYield >= 2) return 6;
+        return 5;
+    }
 
-    return 3;
-  }
+    // Grandes villes tendues
+    private computeTenseYield(yieldValue: number) {
+        if (yieldValue >= 7) return 15;
+        if (yieldValue >= 5.5) return 13;
+        if (yieldValue >= 4) return 10;
+        if (yieldValue >= 3) return 7;
 
-  private computeStandardYield(grossYield: number): number {
-    if (grossYield >= 9) return 15;
-    if (grossYield >= 7) return 13;
-    if (grossYield >= 5) return 10;
-    if (grossYield >= 3) return 7;
+        return 4;
+    }
 
-    return 3;
-  }
+    // Villes classiques
+    private computeStandardYield(yieldValue: number) {
+        if (yieldValue >= 9) return 15;
+        if (yieldValue >= 7) return 13;
+        if (yieldValue >= 5) return 11;
+        if (yieldValue >= 3) return 8;
+
+        return 4;
+    }
 }

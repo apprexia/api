@@ -1,54 +1,69 @@
 import { Injectable } from '@nestjs/common';
 import { EngineContext } from '../../interfaces/engine-context.interface';
 
-export type Verdict = 'INVESTIR' | 'PRIX MARCHE' | 'NEGOCIER' | 'EVITER';
+export type Verdict = 'INVESTIR' | 'OPPORTUNITE' | 'NEGOCIER' | 'EVITER';
 
 @Injectable()
 export class VerdictEngineService {
-  compute(context: EngineContext, score: number): Verdict {
-    const analysis = context.analysis;
+    compute(context: EngineContext, score: number): Verdict {
+        const analysis = context.analysis;
 
-    const asking = analysis.askingPrice;
-    const reference = analysis.dvfReferenceValue;
-    const risk = analysis.riskLevel;
-    const yieldRate = analysis.grossYield;
+        const asking = analysis.askingPrice;
+        const reference = analysis.dvfReferenceValue;
 
-    if (!reference) {
-      return 'PRIX MARCHE';
+        const risk = analysis.riskLevel ?? 50;
+        const yieldRate = analysis.grossYield;
+
+        if (!reference) {
+            return 'OPPORTUNITE';
+        }
+
+        const delta = ((reference - asking) / reference) * 100;
+
+        // ==============================
+        // RISQUE IMPORTANT
+        // ==============================
+
+        if (risk >= 80) {
+            return 'EVITER';
+        }
+
+        // ==============================
+        // OPPORTUNITE FORTE
+        // ==============================
+
+        if (delta >= 15 && score >= 70 && risk <= 40 && (yieldRate == null || yieldRate >= 4)) {
+            return 'INVESTIR';
+        }
+
+        // ==============================
+        // BONNE OPPORTUNITE
+        // ==============================
+
+        if (delta >= 8 && score >= 65 && risk <= 50) {
+            return 'INVESTIR';
+        }
+
+        // ==============================
+        // FORTE SURCOTE
+        // ==============================
+
+        if (delta <= -20) {
+            return 'EVITER';
+        }
+
+        // ==============================
+        // SURCOTE
+        // ==============================
+
+        if (delta <= -5) {
+            return 'NEGOCIER';
+        }
+
+        // ==============================
+        // PRIX COHERENT
+        // ==============================
+
+        return 'OPPORTUNITE';
     }
-
-    const delta = ((reference - asking) / reference) * 100;
-
-    // Risque critique
-    if (risk >= 85) {
-      return 'EVITER';
-    }
-
-    // Forte décote
-    if (
-      delta >= 8 &&
-      risk <= 50 &&
-      score >= 65 &&
-      (yieldRate == null || yieldRate >= 3)
-    ) {
-      return 'INVESTIR';
-    }
-
-    // Prix très supérieur au marché
-    if (delta <= -20) {
-      return 'EVITER';
-    }
-
-    // Prix cohérent
-    if (delta >= -5 && delta <= 5) {
-      return 'PRIX MARCHE';
-    }
-
-    // Surcote raisonnable
-    if (delta < -5) {
-      return 'NEGOCIER';
-    }
-
-    return 'PRIX MARCHE';
-  }
 }

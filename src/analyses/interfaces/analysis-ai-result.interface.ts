@@ -2,156 +2,154 @@ import { PropertyFeatures } from '../../services/meta-data-scrapper/interfaces/p
 import { MarketPosition } from '../../apprexia-engine/interfaces/market-position.interface';
 import { CommuneAnalysis } from 'src/apprexia-engine/interfaces/commune-analysis.interface';
 
-export type Verdict =
-  'INVESTIR' | 'PRIX MARCHE' | 'NEGOCIER' | 'EVITER' | 'ERREUR';
+export type Verdict = 'INVESTIR' | 'OPPORTUNITE' | 'NEGOCIER' | 'EVITER' | 'ERREUR';
 
 export interface ValuationFactor {
-  name: string;
-  impact: number;
-  description?: string;
+    name: string;
+    impact: number;
+    description?: string;
 }
 
 export interface PropertyValuation {
-  baseValue: number;
-  adjustedValue: number;
+    baseValue: number;
+    adjustedValue: number;
 
-  valueLow: number;
-  valueHigh: number;
+    valueLow: number;
+    valueHigh: number;
 
-  factors: ValuationFactor[];
+    factors: ValuationFactor[];
 }
 
 export interface EngineBreakdown {
-  opportunity: number;
-  risk: number;
-  yield: number;
-  amenities: number;
-  confidence: number;
-  liquidity: number;
+    opportunity: number;
+    risk: number;
+    yield: number;
+    amenities: number;
+    confidence: number;
+    liquidity: number;
 }
 
 export interface EngineResult {
-  confidence: number;
-  score: number;
-  verdict: Verdict;
-  marketPosition: MarketPosition;
-  breakdown: EngineBreakdown;
+    confidence: number;
+    score: number;
+    verdict: Verdict;
+    marketPosition: MarketPosition;
+    breakdown: EngineBreakdown;
 }
 
 export interface AmenityResult {
-  score: number;
+    score: number;
 
-  level:
-    'Premium' | 'Très bon' | 'Bon' | 'Correct' | 'Faible' | 'Non renseigné';
+    level: 'Premium' | 'Très bon' | 'Bon' | 'Correct' | 'Faible' | 'Non renseigné';
 
-  highlights: {
-    label: string;
-    icon: string;
-    points: number;
-  }[];
+    highlights: {
+        label: string;
+        icon: string;
+        points: number;
+    }[];
 }
 
 export interface AnalysisAiResult {
-  // ===============================
-  // Bien
-  // ===============================
+    // ===============================
+    // Bien
+    // ===============================
 
-  title: string;
-  city: string;
-  rooms: number;
-  surface: number;
+    title: string;
+    city: string;
+    rooms: number;
+    surface: number;
 
-  description: string;
-  imageUrl: string;
+    description: string;
+    imageUrl: string;
 
-  propertyFeatures?: PropertyFeatures;
+    propertyFeatures?: PropertyFeatures;
 
-  // ===============================
-  // Amenities
-  // ===============================
+    // ===============================
+    // Amenities
+    // ===============================
 
-  amenities?: AmenityResult;
+    amenities?: AmenityResult;
 
-  // ===============================
-  // Commune
-  // ===============================
+    // ===============================
+    // Commune
+    // ===============================
 
-  communeAnalysis?: CommuneAnalysis | null;
+    communeAnalysis?: CommuneAnalysis | null;
 
-  // ===============================
-  // Score Apprexia
-  // ===============================
+    // ===============================
+    // Score Apprexia
+    // ===============================
 
-  score: number;
-  scoreExplanation: string;
+    score: number;
+    scoreExplanation: string;
 
-  // ===============================
-  // Décision
-  // ===============================
+    // ===============================
+    // Décision
+    // ===============================
 
-  verdict: Verdict;
-  verdictExplanation: string;
+    verdict: Verdict;
+    verdictExplanation: string;
 
-  marketPosition: MarketPosition;
+    marketPosition: MarketPosition;
 
-  // ===============================
-  // Valorisation
-  // ===============================
+    // ===============================
+    // Valorisation
+    // ===============================
 
-  estimatedValueLow: number;
-  estimatedValueHigh: number;
+    estimatedValueLow: number;
+    estimatedValueHigh: number;
 
-  dvfReferenceValue: number;
+    dvfReferenceValue: number;
 
-  askingPrice: number;
+    askingPrice: number;
 
-  valuation?: PropertyValuation;
+    valuation?: PropertyValuation;
 
-  // ===============================
-  // Négociation
-  // ===============================
+    // ===============================
+    // Négociation
+    // ===============================
 
-  recommendedPrice: number;
+    recommendedPrice: number;
 
-  negotiationAmount: number;
+    negotiationAmount: number;
 
-  negotiationPotential: number;
+    negotiationPotential: number;
 
-  negotiationAnalysis: string;
+    negotiationAnalysis: string;
 
-  // ===============================
-  // Rentabilité locative
-  // ===============================
+    // ===============================
+    // Rentabilité locative
+    // ===============================
 
-  grossYield?: number | null;
+    grossYield?: number | null;
 
-  yieldLevel: string | null;
+    yieldLevel: string | null;
 
-  yieldAnalysis: string | null;
+    yieldAnalysis: string | null;
 
-  estimatedRentMonthly: number | null;
+    estimatedRentMonthly: number | null;
 
-  estimatedRentLow: number | null;
+    estimatedRentLow: number | null;
 
-  estimatedRentHigh: number | null;
+    estimatedRentHigh: number | null;
 
-  rentPerSquareMeter: number | null;
+    rentPerSquareMeter: number | null;
 
-  rentConfidence: number | null;
+    rentConfidence: number | null;
 
-  // ===============================
-  // Analyse risques
-  // ===============================
+    // ===============================
+    // Analyse risques
+    // ===============================
 
-  riskLevel: number;
+    riskLevel: number;
 
-  strengths: string[];
+    strengths: string[];
 
-  risks: string[];
+    risks: string[];
 
-  // ===============================
-  // Détails moteurs Apprexia
-  // ===============================
+    // ===============================
+    // Détails moteurs Apprexia
+    // ===============================
 
-  engine?: EngineResult;
+    engine?: EngineResult;
 }

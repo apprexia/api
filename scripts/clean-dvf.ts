@@ -18,9 +18,9 @@ let conserve = 0;
 // "1700" -> "01700"
 // =========================
 function normalizePostalCode(cp?: string): string | null {
-  if (!cp) return null;
+    if (!cp) return null;
 
-  return String(cp).trim().padStart(5, '0');
+    return String(cp).trim().padStart(5, '0');
 }
 
 // =========================
@@ -28,18 +28,33 @@ function normalizePostalCode(cp?: string): string | null {
 // supprime accents + casse + parasites
 // =========================
 function normalizeCity(city?: string): string {
-  if (!city) return '';
+    if (!city) return '';
 
-  return city
-    .toUpperCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .replace(/['’]/g, ' ')
-    .replace(/[^A-Z\s-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
+    return (
+        city
+            .toUpperCase()
+            .normalize('NFD')
+            .replace(/\p{Diacritic}/gu, '')
+            .replace(/['’]/g, ' ')
+
+            // =========================
+            // ABRÉVIATIONS COMMUNES DVF
+            // =========================
+            .replace(/\bSS\b/g, 'SOUS')
+            .replace(/\bST\b/g, 'SAINT')
+            .replace(/\bSTE\b/g, 'SAINTE')
+
+            // nettoyage caractères
+            .replace(/[^A-Z\s-]/g, '')
+
+            // espaces multiples
+            .replace(/\s+/g, ' ')
+            .trim()
+
+            // stockage uniforme avec tirets
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+    );
 }
 
 // =========================
@@ -53,154 +68,151 @@ function normalizeCity(city?: string): string {
 // tout devient "PARIS"
 // =========================
 function normalizeMajorCities(city: string, postalCode?: string) {
-  const cp = normalizePostalCode(postalCode);
+    const cp = normalizePostalCode(postalCode);
 
-  if (!cp) {
+    if (!cp) {
+        return normalizeCity(city);
+    }
+
+    // Paris arrondissements
+    if (cp.startsWith('75')) {
+        return 'PARIS';
+    }
+
+    // Lyon arrondissements
+    if (cp.startsWith('690')) {
+        return 'LYON';
+    }
+
+    // Marseille arrondissements
+    if (cp >= '13001' && cp <= '13016') {
+        return 'MARSEILLE';
+    }
+
     return normalizeCity(city);
-  }
-
-  if (cp.startsWith('75')) return 'PARIS';
-
-  // uniquement Lyon intra-muros si tu veux
-  // attention : le Rhône contient beaucoup d'autres communes
-  if (cp.startsWith('6900')) return 'LYON';
-
-  return normalizeCity(city);
 }
 
 // =========================
 // PARSING DATASET DVF
 // =========================
 fs.createReadStream('./scripts/data/dvf-2023.txt')
-  .pipe(
-    csv({
-      separator: '|',
-    }),
-  )
-  .on('data', (row) => {
-    total++;
+    .pipe(
+        csv({
+            separator: '|',
+        }),
+    )
+    .on('data', (row) => {
+        total++;
 
-    const typeLocal = row['Type local'];
+        const typeLocal = row['Type local'];
 
-    // -------------------------
-    // FILTRE : uniquement biens valides
-    // -------------------------
-    if (typeLocal !== 'Maison' && typeLocal !== 'Appartement') {
-      sansType++;
-      return;
-    }
+        // -------------------------
+        // FILTRE : uniquement biens valides
+        // -------------------------
+        if (typeLocal !== 'Maison' && typeLocal !== 'Appartement') {
+            sansType++;
+            return;
+        }
 
-    const surface = Number(row['Surface reelle bati']);
+        const surface = Number(row['Surface reelle bati']);
 
-    if (!surface || surface <= 0) {
-      sansSurface++;
-      return;
-    }
+        if (!surface || surface <= 0) {
+            sansSurface++;
+            return;
+        }
 
-    const prix = Number(
-      row['Valeur fonciere']?.replace(/\s/g, '').replace(',', '.'),
-    );
+        const prix = Number(row['Valeur fonciere']?.replace(/\s/g, '').replace(',', '.'));
 
-    if (!prix) {
-      sansPrix++;
-      return;
-    }
+        if (!prix) {
+            sansPrix++;
+            return;
+        }
 
-    conserve++;
+        conserve++;
 
-    // =========================
-    // CLÉ UNIQUE DE MUTATION
-    // =========================
-    const mutationId = [
-      row['Date mutation'],
-      row['Commune'],
-      row['Code postal'],
-      row['No disposition'],
-    ].join('_');
+        // =========================
+        // CLÉ UNIQUE DE MUTATION
+        // =========================
+        const mutationId = [row['Date mutation'], row['Commune'], row['Code postal'], row['No disposition']].join('_');
 
-    // =========================
-    // INIT VENTE SI PREMIÈRE OCCURRENCE
-    // =========================
-    if (!ventes.has(mutationId)) {
-      const city = normalizeMajorCities(row['Commune'], row['Code postal']);
+        // =========================
+        // INIT VENTE SI PREMIÈRE OCCURRENCE
+        // =========================
+        if (!ventes.has(mutationId)) {
+            const city = normalizeMajorCities(row['Commune'], row['Code postal']);
 
-      const dateMutation = parseFrenchDate(row['Date mutation']);
-      const year =
-        dateMutation && !isNaN(new Date(dateMutation).getTime())
-          ? new Date(dateMutation).getFullYear()
-          : null;
+            const dateMutation = parseFrenchDate(row['Date mutation']);
+            const year =
+                dateMutation && !isNaN(new Date(dateMutation).getTime()) ? new Date(dateMutation).getFullYear() : null;
 
-      ventes.set(mutationId, {
-        mutationId,
+            ventes.set(mutationId, {
+                mutationId,
 
-        // date normalisée YYYY-MM-DD
-        dateMutation,
+                // date normalisée YYYY-MM-DD
+                dateMutation,
 
-        // 🔥 AJOUT IMPORTANT : année DVF pour analyse temporelle
-        year,
+                // 🔥 AJOUT IMPORTANT : année DVF pour analyse temporelle
+                year,
 
-        // ville clean (clé principale de matching)
-        commune: city,
+                // ville clean (clé principale de matching)
+                commune: city,
 
-        // code postal TOUJOURS sur 5 digits
-        codePostal: normalizePostalCode(row['Code postal']),
+                // code postal TOUJOURS sur 5 digits
+                codePostal: normalizePostalCode(row['Code postal']),
 
-        typeLocal,
+                typeLocal,
 
-        surface: 0,
-        pieces: 0,
+                surface: 0,
+                pieces: 0,
 
-        valeurFonciere: prix,
-      });
-    }
+                valeurFonciere: prix,
+            });
+        }
 
-    // =========================
-    // AGGREGATION DES DONNÉES
-    // =========================
-    const vente = ventes.get(mutationId);
+        // =========================
+        // AGGREGATION DES DONNÉES
+        // =========================
+        const vente = ventes.get(mutationId);
 
-    vente.surface += surface;
-    vente.pieces += Number(row['Nombre pieces principales']) || 0;
-  })
-
-  // =========================
-  // EXPORT FINAL DATASET CLEAN
-  // =========================
-  .on('end', () => {
-    const results = Array.from(ventes.values()).map((vente) => ({
-      ...vente,
-
-      // prix au m² calculé proprement
-      prixM2:
-        vente.surface > 0
-          ? Math.round(vente.valeurFonciere / vente.surface)
-          : 0,
-    }));
-
-    fs.writeFileSync('./scripts/data/dvf-clean.json', JSON.stringify(results, null, 2));
+        vente.surface += surface;
+        vente.pieces += Number(row['Nombre pieces principales']) || 0;
+    })
 
     // =========================
-    // LOG QUALITÉ DATASET
+    // EXPORT FINAL DATASET CLEAN
     // =========================
-    console.log('==============================');
-    console.log(`📄 Lignes DVF lues : ${total}`);
-    console.log(`🏠 Ventes conservées : ${conserve}`);
-    console.log(`📦 Ventes finales : ${results.length}`);
-    console.log(`❌ Sans type : ${sansType}`);
-    console.log(`❌ Sans surface : ${sansSurface}`);
-    console.log(`❌ Sans prix : ${sansPrix}`);
-    console.log('==============================');
-  });
+    .on('end', () => {
+        const results = Array.from(ventes.values()).map((vente) => ({
+            ...vente,
+
+            // prix au m² calculé proprement
+            prixM2: vente.surface > 0 ? Math.round(vente.valeurFonciere / vente.surface) : 0,
+        }));
+
+        fs.writeFileSync('./scripts/data/dvf-clean.json', JSON.stringify(results, null, 2));
+
+        // =========================
+        // LOG QUALITÉ DATASET
+        // =========================
+        console.log('==============================');
+        console.log(`📄 Lignes DVF lues : ${total}`);
+        console.log(`🏠 Ventes conservées : ${conserve}`);
+        console.log(`📦 Ventes finales : ${results.length}`);
+        console.log(`❌ Sans type : ${sansType}`);
+        console.log(`❌ Sans surface : ${sansSurface}`);
+        console.log(`❌ Sans prix : ${sansPrix}`);
+        console.log('==============================');
+    });
 
 // =========================
 // PARSING DATE FR FR -> ISO
 // =========================
 function parseFrenchDate(date: string): string | null {
-  if (!date) return null;
+    if (!date) return null;
 
-  const [day, month, year] = date.split('/');
+    const [day, month, year] = date.split('/');
 
-  if (!day || !month || !year) return null;
+    if (!day || !month || !year) return null;
 
-  return `${year}-${month}-${day}`;
+    return `${year}-${month}-${day}`;
 }
