@@ -1,5 +1,4 @@
 services:
-
   postgres:
     image: postgres:17
     container_name: apprexia-postgres
@@ -22,7 +21,6 @@ services:
       timeout: 5s
       retries: 5
 
-
   api:
     build:
       context: .
@@ -33,7 +31,21 @@ services:
 
     environment:
       NODE_ENV: production
+
       DATABASE_URL: postgresql://apprexia:${POSTGRES_PASSWORD}@postgres:5432/apprexia
+
+      JWT_SECRET: ${JWT_SECRET}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_EXTENSION_CLIENT_ID: ${GOOGLE_EXTENSION_CLIENT_ID}
+
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+
+      FRONTEND_URL: ${FRONTEND_URL}
 
     depends_on:
       postgres:
@@ -45,10 +57,8 @@ services:
     networks:
       - apprexia-network
 
-
 volumes:
   postgres_data:
-
 
 networks:
   apprexia-network:
