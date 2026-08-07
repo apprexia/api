@@ -5,16 +5,16 @@ import { join } from 'path';
 
 @Injectable()
 export class ReportService {
-  async generateAnalysisPdf(data: any): Promise<Buffer> {
-    const logoPath = join(process.cwd(), 'src/report/assets/logo.png');
+    async generateAnalysisPdf(data: any): Promise<Buffer> {
+        const logoPath = join(process.cwd(), 'src/report/assets/logo.png');
 
-    const logoBase64 = readFileSync(logoPath).toString('base64');
-    const reportDate = new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-    }).format(new Date());
-    const html = `
+        const logoBase64 = readFileSync(logoPath).toString('base64');
+        const reportDate = new Intl.DateTimeFormat('fr-FR', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+        }).format(new Date());
+        const html = `
 <html>
 
 <head>
@@ -305,9 +305,9 @@ export class ReportService {
 
             <p>
                 ${
-                  data.negotiationAmount > 0
-                    ? `Une négociation d'environ ${data.negotiationAmount} € est recommandée.`
-                    : `Le prix semble cohérent avec le marché actuel.`
+                    data.negotiationAmount > 0
+                        ? `Une négociation d'environ ${data.negotiationAmount} € est recommandée.`
+                        : `Le prix semble cohérent avec le marché actuel.`
                 }
             </p>
 
@@ -498,11 +498,11 @@ export class ReportService {
 
             <p>
                 ${
-                  data.marketPosition === 'SOUS_PRIX'
-                    ? 'Le bien semble proposé sous les références du marché.'
-                    : data.marketPosition === 'PRIX_MARCHE'
-                      ? 'Le prix est cohérent avec les références observées.'
-                      : 'Le prix affiché apparaît supérieur aux références disponibles.'
+                    data.marketPosition === 'SOUS_PRIX'
+                        ? 'Le bien semble proposé sous les références du marché.'
+                        : data.marketPosition === 'PRIX_MARCHE'
+                          ? 'Le prix est cohérent avec les références observées.'
+                          : 'Le prix affiché apparaît supérieur aux références disponibles.'
                 }
             </p>
 
@@ -607,13 +607,13 @@ export class ReportService {
             <ul>
 
                 ${data.strengths
-                  .map(
-                    (item) => `
+                    .map(
+                        (item) => `
                 <li style="margin-bottom:10px; list-style-type: none;">
                     ✅ ${item}
                 </li>`,
-                  )
-                  .join('')}
+                    )
+                    .join('')}
 
             </ul>
 
@@ -626,13 +626,13 @@ export class ReportService {
             <ul>
 
                 ${data.risks
-                  .map(
-                    (item) => `
+                    .map(
+                        (item) => `
                 <li style="margin-bottom:10px; list-style-type: none;">
                     ⚠️ ${item}
                 </li>`,
-                  )
-                  .join('')}
+                    )
+                    .join('')}
 
             </ul>
 
@@ -658,12 +658,12 @@ export class ReportService {
                 <strong>${data.recommendedPrice} €</strong>.
 
                 ${
-                  data.negotiationAmount > 0
-                    ? `Une offre comprise entre
+                    data.negotiationAmount > 0
+                        ? `Une offre comprise entre
                 ${data.recommendedPrice} € et
                 ${data.askingPrice} €
                 semble cohérente au regard des données du marché.`
-                    : `Le prix apparaît cohérent avec les références disponibles.`
+                        : `Le prix apparaît cohérent avec les références disponibles.`
                 }
 
             </p>
@@ -696,19 +696,22 @@ export class ReportService {
 </html>
 `;
 
-    const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch({
+            executablePath: '/ms-playwright/chromium-*/chrome-linux/chrome',
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
 
-    const page = await browser.newPage();
+        const page = await browser.newPage();
 
-    await page.setContent(html);
-    await page.emulateMediaType('screen');
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-    });
+        await page.setContent(html);
+        await page.emulateMediaType('screen');
+        const pdf = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+        });
 
-    await browser.close();
+        await browser.close();
 
-    return Buffer.from(pdf);
-  }
+        return Buffer.from(pdf);
+    }
 }

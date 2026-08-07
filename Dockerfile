@@ -3,14 +3,11 @@ FROM mcr.microsoft.com/playwright:v1.61.0-noble
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends unzip \
-    && rm -rf /var/lib/apt/lists/*
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY package*.json ./
 
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY prisma ./prisma
 
