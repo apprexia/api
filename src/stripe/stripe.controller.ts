@@ -1,29 +1,34 @@
 import { Controller, Post, Req, Headers, BadRequestException } from '@nestjs/common';
-import type { Request } from 'express';
-
-type StripeRequest = Request & {
-    rawBody: Buffer;
-};
+import { Request } from 'express';
 import Stripe from 'stripe';
-import { StripeService } from './stripe.service';
 
 @Controller('stripe')
 export class StripeController {
     private stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-    constructor(private readonly stripeService: StripeService) {}
-
     @Post('webhook')
-    async webhook(@Req() req: StripeRequest, @Headers('stripe-signature') signature: string) {
+    async handleWebhook(@Req() req: Request & { rawBody?: Buffer }, @Headers('stripe-signature') signature: string) {
+        console.log('🔥 STRIPE WEBHOOK REÇU');
+
         let event: Stripe.Event;
 
         try {
             event = this.stripe.webhooks.constructEvent(req.rawBody!, signature, process.env.STRIPE_WEBHOOK_SECRET!);
         } catch (err) {
-            throw new BadRequestException(`Webhook error: ${err.message}`);
+            console.error('❌ Signature Stripe invalide', err);
+            throw new BadRequestException('Invalid signature');
         }
 
-        await this.stripeService.handleEvent(event);
+        console.log('✅ EVENT:', event.type);
+        console.log('🆔 EVENT ID:', event.id);
+
+        if (event.type === 'checkout.session.completed') {
+            const session = event.data.object as Stripe.Checkout.Session;
+
+            console.log('💰 CHECKOUT COMPLETED');
+            console.log('Session:', session.id);
+            console.log('Metadata:', session.metadata);
+        }
 
         return { received: true };
     }
