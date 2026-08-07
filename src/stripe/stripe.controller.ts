@@ -1,5 +1,9 @@
 import { Controller, Post, Req, Headers, BadRequestException } from '@nestjs/common';
 import type { Request } from 'express';
+
+type StripeRequest = Request & {
+    rawBody: Buffer;
+};
 import Stripe from 'stripe';
 import { StripeService } from './stripe.service';
 
@@ -10,11 +14,11 @@ export class StripeController {
     constructor(private readonly stripeService: StripeService) {}
 
     @Post('webhook')
-    async webhook(@Req() req: Request, @Headers('stripe-signature') signature: string) {
+    async webhook(@Req() req: StripeRequest, @Headers('stripe-signature') signature: string) {
         let event: Stripe.Event;
 
         try {
-            event = this.stripe.webhooks.constructEvent(req.body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
+            event = this.stripe.webhooks.constructEvent(req.rawBody!, signature, process.env.STRIPE_WEBHOOK_SECRET!);
         } catch (err) {
             throw new BadRequestException(`Webhook error: ${err.message}`);
         }
