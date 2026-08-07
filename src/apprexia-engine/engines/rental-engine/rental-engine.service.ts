@@ -16,14 +16,10 @@ export class RentalEngineService {
               : PropertyType.APARTMENT;
 
         const rental = await this.rentalMarketService.estimateRent({
-            inseeCode: context.metadata.inseeCode ?? context.dvf?.inseeCode ?? null,
-
+            inseeCode: context.metadata.inseeCode ?? context.dvf?.inseeCode ?? context.commune?.codeInsee ?? null,
             city: context.dvf?.city ?? context.metadata.city ?? context.analysis.city,
-
             propertyType,
-
             rooms: context.metadata.rooms ?? context.analysis.rooms ?? null,
-
             surface: context.metadata.surface ?? context.analysis.surface ?? null,
         });
 

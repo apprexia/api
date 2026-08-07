@@ -11,10 +11,9 @@ import { DvfService } from '../dvf/dvf.service';
 import { CreateManualAnalysisDto } from './dto/create-manual-analysis.dto';
 import { AnalysisMarketService } from 'src/analysis-market/analysis-market.service';
 import { ApprexiaMarketData } from './interfaces/apprexia-market-data.interface';
-import { AnalysisStatus, Prisma } from '@prisma/client';
+import { AnalysisStatus, CommuneIndicator, Prisma } from '@prisma/client';
 import { DvfMarketData } from './interfaces/dvf-market-data.interface';
 import { ApprexiaEngineService } from '../apprexia-engine/apprexia-engine.service';
-import { RentalEngineService } from '../apprexia-engine/engines/rental-engine/rental-engine.service';
 import { RentalResult } from './interfaces/rental-result.interface';
 import { LocationProviderService } from '../apprexia-engine/providers/location-provider/location-provider.service';
 import { LocationEngineService } from '../apprexia-engine/engines/location-engine/location-engine.service';
@@ -22,7 +21,6 @@ import { LocationAnalysis, LocationEngineInput } from '../apprexia-engine/interf
 import { GeocodingProviderService } from '../apprexia-engine/providers/geocoding-provider/geocoding-provider.service';
 import { AmenityEngineService } from '../apprexia-engine/engines/amenity-engine/amenity-engine.service';
 import { CommuneIndicatorService } from '../commune-indicator/commune-indicator.service';
-import { CommuneIndicator } from '@prisma/client';
 
 @Injectable()
 export class AnalysesService {
@@ -37,7 +35,6 @@ export class AnalysesService {
         private dvfService: DvfService,
         private analysisMarketService: AnalysisMarketService,
         private apprexiaEngineService: ApprexiaEngineService,
-        private rentalEngineService: RentalEngineService,
         private readonly locationProvider: LocationProviderService,
         private readonly locationEngine: LocationEngineService,
         private readonly geocodingProvider: GeocodingProviderService,
@@ -187,24 +184,7 @@ export class AnalysesService {
             console.log(communeIndicator);
 
             // -------------------------
-            // ÉTAPE 2.1 : RENTABILITE LOCATIVE
-            // -------------------------
-            rentalData = await this.rentalEngineService.compute({
-                metadata,
-
-                analysis: {
-                    city: metadata.city,
-                    typeLocal: metadata.typeLocal,
-                    rooms: metadata.rooms,
-                    surface: metadata.surface,
-                    askingPrice: metadata.price,
-                },
-
-                dvf: marketData,
-            });
-
-            // -------------------------
-            // ÉTAPE 2.2 : LOCATION ENGINE
+            // ÉTAPE 2.1 : LOCATION ENGINE
             // -------------------------
 
             let latitude = metadata.latitude;

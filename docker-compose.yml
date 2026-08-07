@@ -1,0 +1,55 @@
+services:
+
+  postgres:
+    image: postgres:17
+    container_name: apprexia-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: apprexia
+      POSTGRES_USER: apprexia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - apprexia-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apprexia -d apprexia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: apprexia-api
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://apprexia:${POSTGRES_PASSWORD}@postgres:5432/apprexia
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "3000:3000"
+
+    networks:
+      - apprexia-network
+
+
+volumes:
+  postgres_data:
+
+
+networks:
+  apprexia-network:
+    driver: bridge
