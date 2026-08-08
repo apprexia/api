@@ -8,16 +8,16 @@ import { CreateCheckoutDto } from './dto/create-checkout.dto';
 
 @Controller('credits')
 export class CreditsController {
-  constructor(private creditsService: CreditsService) {}
+    constructor(private creditsService: CreditsService) {}
 
-  @Post('checkout')
-  @UseGuards(AuthGuard('jwt'))
-  checkout(@Body() dto: CreateCheckoutDto, @Req() req) {
-    return this.creditsService.createCheckout(dto.packageId, req.user.sub);
-  }
+    @Post('checkout')
+    @UseGuards(AuthGuard('jwt'))
+    checkout(@Body() dto: CreateCheckoutDto, @Req() req) {
+        return this.creditsService.createCheckout(dto.packageId, req.user.sub);
+    }
 
-  @Post('confirm')
-  confirmPayment(@Body() body: { sessionId: string }) {
-    return this.creditsService.confirmPayment(body.sessionId);
-  }
+    @Post('confirm')
+    confirmPayment(@Body() body: { sessionId: string }) {
+        return this.creditsService.confirmPayment(body.sessionId);
+    }
 }

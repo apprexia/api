@@ -1,15 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  UseGuards,
-  Req,
-  Res,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Res } from '@nestjs/common';
 
 import { AuthService } from './auth.service';
 import { CreateAuthDto } from './dto/create-auth.dto';
@@ -19,111 +8,111 @@ import { AuthGuard } from '@nestjs/passport';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+    constructor(private readonly authService: AuthService) {}
 
-  /**
-   * ============================
-   * GOOGLE LOGIN SITE ANGULAR
-   * ============================
-   */
+    /**
+     * ============================
+     * GOOGLE LOGIN SITE ANGULAR
+     * ============================
+     */
 
-  @Get('google')
-  @UseGuards(AuthGuard('google'))
-  googleLogin() {}
+    @Get('google')
+    @UseGuards(AuthGuard('google'))
+    googleLogin() {}
 
-  /**
-   * CALLBACK GOOGLE ANGULAR
-   */
+    /**
+     * CALLBACK GOOGLE ANGULAR
+     */
 
-  @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
-  async googleCallback(@Req() req, @Res() res) {
-    const token = await this.authService.loginWithGoogle(req.user);
+    @Get('google/callback')
+    @UseGuards(AuthGuard('google'))
+    async googleCallback(@Req() req, @Res() res) {
+        const token = await this.authService.loginWithGoogle(req.user);
 
-    return res.redirect(`http://localhost:4200/auth/success?token=${token}`);
-  }
+        return res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`);
+    }
 
-  /**
-   * ============================
-   * GOOGLE LOGIN EXTENSION CHROME
-   * ============================
-   *
-   * Reçoit le code OAuth Google
-   * envoyé par chrome.identity.launchWebAuthFlow()
-   */
-  @Post('google/extension')
-  async googleExtensionLogin(@Body() body: { code: string }) {
-    console.log('googleExtensionLogin', body);
+    /**
+     * ============================
+     * GOOGLE LOGIN EXTENSION CHROME
+     * ============================
+     *
+     * Reçoit le code OAuth Google
+     * envoyé par chrome.identity.launchWebAuthFlow()
+     */
+    @Post('google/extension')
+    async googleExtensionLogin(@Body() body: { code: string }) {
+        console.log('googleExtensionLogin', body);
 
-    const user = await this.authService.loginWithGoogleCode(body.code);
+        const user = await this.authService.loginWithGoogleCode(body.code);
 
-    const token = await this.authService.generateJwt(user);
+        const token = await this.authService.generateJwt(user);
 
-    return {
-      token,
-    };
-  }
+        return {
+            token,
+        };
+    }
 
-  /**
-   * ============================
-   * TWITTER OPTIONNEL
-   * ============================
-   */
+    /**
+     * ============================
+     * TWITTER OPTIONNEL
+     * ============================
+     */
 
-  @Get('x')
-  @UseGuards(AuthGuard('twitter'))
-  xLogin() {}
+    @Get('x')
+    @UseGuards(AuthGuard('twitter'))
+    xLogin() {}
 
-  @Get('x/callback')
-  @UseGuards(AuthGuard('twitter'))
-  async xCallback(@Req() req, @Res() res) {
-    const token = await this.authService.generateJwt(req.user);
+    @Get('x/callback')
+    @UseGuards(AuthGuard('twitter'))
+    async xCallback(@Req() req, @Res() res) {
+        const token = await this.authService.generateJwt(req.user);
 
-    return res.redirect(`http://localhost:4200/auth/success?token=${token}`);
-  }
+        return res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`);
+    }
 
-  /**
-   * ============================
-   * CRUD AUTH
-   * ============================
-   */
+    /**
+     * ============================
+     * CRUD AUTH
+     * ============================
+     */
 
-  @Post()
-  create(
-    @Body()
-    createAuthDto: CreateAuthDto,
-  ) {
-    return this.authService.create(createAuthDto);
-  }
+    @Post()
+    create(
+        @Body()
+        createAuthDto: CreateAuthDto,
+    ) {
+        return this.authService.create(createAuthDto);
+    }
 
-  @Get()
-  findAll() {
-    return this.authService.findAll();
-  }
+    @Get()
+    findAll() {
+        return this.authService.findAll();
+    }
 
-  @Get(':id')
-  findOne(
-    @Param('id')
-    id: string,
-  ) {
-    return this.authService.findOne(+id);
-  }
+    @Get(':id')
+    findOne(
+        @Param('id')
+        id: string,
+    ) {
+        return this.authService.findOne(+id);
+    }
 
-  @Patch(':id')
-  update(
-    @Param('id')
-    id: string,
-    @Body()
-    updateAuthDto: UpdateAuthDto,
-  ) {
-    return this.authService.update(+id, updateAuthDto);
-  }
+    @Patch(':id')
+    update(
+        @Param('id')
+        id: string,
+        @Body()
+        updateAuthDto: UpdateAuthDto,
+    ) {
+        return this.authService.update(+id, updateAuthDto);
+    }
 
-  @Delete(':id')
-  remove(
-    @Param('id')
-    id: string,
-  ) {
-    return this.authService.remove(+id);
-  }
+    @Delete(':id')
+    remove(
+        @Param('id')
+        id: string,
+    ) {
+        return this.authService.remove(+id);
+    }
 }
