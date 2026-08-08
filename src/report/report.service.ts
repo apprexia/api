@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { readFileSync } from 'fs';
 import puppeteer from 'puppeteer';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 @Injectable()
@@ -695,9 +695,20 @@ export class ReportService {
 
 </html>
 `;
+        const chromiumDir = readdirSync('/ms-playwright').find((dir) => dir.startsWith('chromium-'));
+
+        if (!chromiumDir) {
+            throw new Error('Chromium Playwright introuvable');
+        }
+
+        const executablePath = `/ms-playwright/${chromiumDir}/chrome-linux64/chrome`;
+
+        if (!existsSync(executablePath)) {
+            throw new Error(`Chromium introuvable : ${executablePath}`);
+        }
 
         const browser = await puppeteer.launch({
-            executablePath: '/ms-playwright/chromium-*/chrome-linux/chrome',
+            executablePath: '/ms-playwright/chromium-1228/chrome-linux64/chrome',
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
 

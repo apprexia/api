@@ -6,29 +6,25 @@ import { AuthGuard } from '@nestjs/passport';
 
 @Controller('report')
 export class ReportController {
-  constructor(
-    private readonly analysisService: AnalysesService,
-    private readonly reportService: ReportService,
-  ) {}
+    constructor(
+        private readonly analysisService: AnalysesService,
+        private readonly reportService: ReportService,
+    ) {}
 
-  @Get(':id/report')
-  @UseGuards(AuthGuard('jwt'))
-  async generateReport(
-    @Param('id') id: string,
-    @Req() req,
-    @Res() res: Response,
-  ) {
-    const userId = req.user.id;
+    @Get(':id/report')
+    @UseGuards(AuthGuard('jwt'))
+    async generateReport(@Param('id') id: string, @Req() req, @Res() res: Response) {
+        const userId = req.user.id;
 
-    const analysis = await this.analysisService.findOne(id, userId);
+        const analysis = await this.analysisService.findOne(id, userId);
 
-    const pdf = await this.reportService.generateAnalysisPdf(analysis);
+        const pdf = await this.reportService.generateAnalysisPdf(analysis);
 
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=apprexia-report-${id}.pdf`,
-    });
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename=apprexia-report-${id}.pdf`,
+        });
 
-    res.send(pdf);
-  }
+        res.send(pdf);
+    }
 }
