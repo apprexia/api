@@ -3,7 +3,7 @@ import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { UpdateAnalysisDto } from './dto/update-analysis.dto';
 import { PrismaService } from '../services/prisma/prisma.service';
 import { AnalysesAiService } from '../services/analyses-ai/analyses-ai.service';
-import { AnalysisAiResult } from './interfaces/analysis-ai-result.interface';
+import { AnalysisAiResult, Verdict } from './interfaces/analysis-ai-result.interface';
 import { ListingMetadata, MetadataScraperService } from '../services/meta-data-scrapper/meta-data-scrapper.service';
 import { UsersService } from 'src/users/users.service';
 import { CreditsService } from '../credits/credits.service';
@@ -464,12 +464,19 @@ export class AnalysesService {
         });
     }
 
-    async findAll(userId: string, page = 1, limit = 10, status?: AnalysisStatus) {
+    async findAll(userId: string, page = 1, limit = 10, status?: AnalysisStatus, verdict?: Verdict) {
         const skip = (page - 1) * limit;
 
         const where: Prisma.AnalysisWhereInput = {
             userId,
-            ...(status && { status }),
+
+            ...(status && {
+                status,
+            }),
+
+            ...(verdict && {
+                verdict,
+            }),
         };
 
         const [data, total] = await Promise.all([
@@ -477,6 +484,7 @@ export class AnalysesService {
                 where,
                 skip,
                 take: limit,
+
                 orderBy: {
                     createdAt: 'desc',
                 },

@@ -2,7 +2,7 @@ import { PropertyFeatures } from '../../services/meta-data-scrapper/interfaces/p
 import { MarketPosition } from '../../apprexia-engine/interfaces/market-position.interface';
 import { CommuneAnalysis } from 'src/apprexia-engine/interfaces/commune-analysis.interface';
 
-export type Verdict = 'INVESTIR' | 'OPPORTUNITE' | 'NEGOCIER' | 'EVITER' | 'ERREUR';
+export type Verdict = 'INVESTIR' | 'FAVORABLE' | 'NEGOCIER' | 'EVITER' | 'ERREUR';
 
 export interface ValuationFactor {
     name: string;

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { EngineContext } from '../../interfaces/engine-context.interface';
 
-export type Verdict = 'INVESTIR' | 'OPPORTUNITE' | 'NEGOCIER' | 'EVITER';
+export type Verdict = 'INVESTIR' | 'FAVORABLE' | 'NEGOCIER' | 'EVITER';
 
 @Injectable()
 export class VerdictEngineService {
@@ -15,7 +15,7 @@ export class VerdictEngineService {
         const yieldRate = analysis.grossYield;
 
         if (!reference) {
-            return 'OPPORTUNITE';
+            return 'FAVORABLE';
         }
 
         const delta = ((reference - asking) / reference) * 100;
@@ -64,6 +64,6 @@ export class VerdictEngineService {
         // PRIX COHERENT
         // ==============================
 
-        return 'OPPORTUNITE';
+        return 'FAVORABLE';
     }
 }
