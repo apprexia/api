@@ -15,236 +15,1061 @@ export class ReportService {
             year: 'numeric',
         }).format(new Date());
         const html = `
-<html>
 
-<head>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
-    <style>
-        @page {
-            margin: 0px;
-        }
+<style>
 
+/* =========================================================
+   A4 — FULL BLEED DARK
+========================================================= */
 
-        body {
-            font-family: 'DM Sans', Arial, sans-serif;
-            background: #0a0e1a;
-            color: #ffffffb3;
-            margin: 0;
-            padding: 40px;
-            -webkit-font-smoothing: antialiased;
-        }
+@page {
+    size: A4;
+    margin: 0;
+}
 
+* {
+    box-sizing: border-box;
+}
 
-        .header {
-            border-radius: 18px;
-            padding: 35px 0 0;
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+}
 
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+body {
+    font-family: 'DM Sans', Arial, sans-serif;
 
-        .logo {
-            width: 120px;
-            border-radius: 20px;
-        }
+    background: #0a0e1a;
+    color: #f8fafc;
 
-        .brand {
-            font-size: 52px;
-            font-weight: 800;
-            background: linear-gradient(135deg,
-                    #fff 0%,
-                    #a5b4fc 50%,
-                    #ec4899 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
+    font-size: 13px;
+    line-height: 1.5;
 
-        .subtitle {
-            opacity: 0.7;
-            font-size: 14px;
-        }
+    -webkit-font-smoothing: antialiased;
 
-        .generated {
-            margin-top: 15px;
-            font-size: 12px;
-            opacity: 0.7;
-
-        }
-
-        .section {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-        .with-2-cards {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-        }
-
-        .with-2-cards .card {
-            width: 50%;
-            min-height: 420px;
-        }
-
-        .card {
-            margin-top: 20px;
-            background: #111827;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 18px;
-            padding: 25px;
-            /* break-inside: avoid;
-            page-break-inside: avoid; */
-        }
-
-        .card h2 {
-            margin-top: 0;
-        }
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+}
 
 
+/* =========================================================
+   DESIGN TOKENS
+========================================================= */
 
-        .score {
+:root {
+    --bg: #171d3f;
 
-            width: 120px;
-            height: 120px;
+    --surface: rgba(255, 255, 255, 0.045);
+    --surface-2: rgba(255, 255, 255, 0.07);
 
-            border-radius: 50%;
+    --border: rgba(255, 255, 255, 0.10);
+    --border-soft: rgba(255, 255, 255, 0.065);
 
-            background:
-                linear-gradient(135deg,
-                    #6366f1,
-                    #ec4899);
+    --text: #f8fafc;
+    --text-soft: #c2c8da;
+    --text-muted: #858eaa;
 
+    --accent: #a5b4fc;
+    --accent-strong: #818cf8;
 
-            display: flex;
-            align-items: center;
-            justify-content: center;
+    --pink: #ec4899;
 
-            font-size: 38px;
-            font-weight: bold;
-
-        }
-
-        .image-container {
-            position: relative;
-        }
-
-        .property-image {
-            width: 100%;
-            height: 300px;
-            object-fit: cover;
-            border-radius: 18px;
-        }
+    --green: #86efac;
+    --orange: #fbbf24;
+}
 
 
-        .image-overlay {
+/* =========================================================
+   PAGE
+========================================================= */
 
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
+.page {
+    position: relative;
 
-            padding: 25px;
+    width: 100%;
+    min-height: 297mm;
 
-            background:
-                linear-gradient(transparent,
-                    rgba(0, 0, 0, .85));
+    padding: 14mm 17mm 11mm;
 
-        }
+    overflow: hidden;
 
-
-        .overlay-title {
-            background: linear-gradient(135deg,
-                    #fff 0%,
-                    #a5b4fc 50%,
-                    #ec4899 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            font-size: 30px;
-            font-weight: 700;
-
-        }
-
-
-        .overlay-info {
-
-            margin-top: 8px;
-            opacity: .8;
-
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns:
-                repeat(2, 1fr);
-            gap: 15px;
-        }
+    background:
+        radial-gradient(
+            circle at 92% 4%,
+            rgba(129, 140, 248, 0.12),
+            transparent 25%
+        ),
+        radial-gradient(
+            circle at 5% 48%,
+            rgba(236, 72, 153, 0.045),
+            transparent 22%
+        ),
+        #171d3f;
+}
 
 
-        .stat {
-            background: #0f172a;
-            padding: 18px;
-            border-radius: 12px;
-        }
+/* =========================================================
+   HEADER
+========================================================= */
 
-        ul {
-            padding: 0;
-        }
+.header {
+    display: flex;
+
+    justify-content: space-between;
+    align-items: flex-start;
+
+    padding-bottom: 13px;
+
+    border-bottom: 1px solid var(--border);
+}
+
+.brand-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.brand {
+    font-size: 30px;
+
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: -1.4px;
+
+    background: linear-gradient(
+        135deg,
+        #ffffff 0%,
+        #c7d2fe 55%,
+        #ec4899 100%
+    );
+
+    -webkit-background-clip: text;
+    background-clip: text;
+
+    color: transparent;
+}
+
+.brand span {
+    color: #ec4899;
+}
+
+.subtitle {
+    margin-top: 5px;
+
+    color: var(--text-soft);
+
+    font-size: 11px;
+}
+
+.generated {
+    margin-top: 3px;
+
+    color: var(--text-muted);
+
+    font-size: 9px;
+}
+
+.logo {
+    width: 78px;
+    height: auto;
+}
 
 
-        .label {
-            font-size: 12px;
-            color: #94a3b8;
-        }
+/* =========================================================
+   REPORT TAG
+========================================================= */
+
+.report-tag {
+    display: inline-flex;
+
+    align-items: center;
+
+    margin-top: 13px;
+
+    padding: 5px 9px;
+
+    border: 1px solid var(--border);
+
+    border-radius: 20px;
+
+    background: rgba(255,255,255,.035);
+
+    color: var(--text-muted);
+
+    font-size: 9px;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+}
 
 
-        .value {
-            font-size: 22px;
-            font-weight: bold;
-            margin-top: 8px;
-            background: linear-gradient(135deg,
-                    #fff 0%,
-                    #a5b4fc 50%,
-                    #ec4899 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
+/* =========================================================
+   PROPERTY HERO
+========================================================= */
+
+.property-hero {
+    position: relative;
+
+    display: grid;
+
+    grid-template-columns: 44% 56%;
+
+    min-height: 164px;
+
+    margin-top: 13px;
+
+    overflow: hidden;
+
+    border: 1px solid var(--border);
+
+    border-radius: 10px;
+
+    background: rgba(255,255,255,.035);
+}
+
+.property-image-wrapper {
+    position: relative;
+
+    min-height: 164px;
+
+    overflow: hidden;
+}
+
+.property-image-wrapper::after {
+    content: "";
+
+    position: absolute;
+
+    inset: 0;
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent 55%,
+            rgba(23,29,63,.35) 100%
+        );
+}
+
+.property-image {
+    width: 100%;
+    height: 100%;
+
+    object-fit: cover;
+}
+
+.property-info {
+    position: relative;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+
+    padding: 20px 24px;
+}
+
+.property-kicker {
+    margin-bottom: 6px;
+
+    color: var(--accent);
+
+    font-size: 9px;
+
+    font-weight: 700;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1.5px;
+}
+
+.property-title {
+    margin: 0;
+
+    color: var(--text);
+
+    font-size: 22px;
+
+    line-height: 1.15;
+
+    font-weight: 750;
+
+    letter-spacing: -.5px;
+}
+
+.property-location {
+    margin-top: 6px;
+
+    color: var(--text-soft);
+
+    font-size: 11px;
+}
+
+.property-meta {
+    display: flex;
+
+    gap: 20px;
+
+    margin-top: 16px;
+
+    padding-top: 12px;
+
+    border-top: 1px solid var(--border-soft);
+}
+
+.meta-item {
+    display: flex;
+
+    flex-direction: column;
+}
+
+.meta-label {
+    color: var(--text-muted);
+
+    font-size: 8.5px;
+
+    font-weight: 600;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+}
+
+.meta-value {
+    margin-top: 3px;
+
+    color: var(--text);
+
+    font-size: 12px;
+
+    font-weight: 700;
+}
 
 
+/* =========================================================
+   SECTION
+========================================================= */
 
-        .verdict {
-            font-size: 40px;
-            font-weight: 800;
-            background: linear-gradient(135deg,
-                    #fff 0%,
-                    #a5b4fc 50%,
-                    #ec4899 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
+.section {
+    margin-top: 15px;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.section-heading {
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    margin-bottom: 8px;
+}
+
+.section-number {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    width: 18px;
+    height: 18px;
+
+    border-radius: 5px;
+
+    background: rgba(129,140,248,.14);
+
+    color: var(--accent);
+
+    font-size: 9px;
+
+    font-weight: 700;
+}
+
+.section-title {
+    margin: 0;
+
+    color: var(--text);
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1.3px;
+}
+
+.section-line {
+    flex: 1;
+
+    height: 1px;
+
+    background: var(--border-soft);
+}
 
 
+/* =========================================================
+   SUMMARY
+========================================================= */
 
-        .footer {
-            margin-top: 40px;
-            text-align: center;
-            color: #64748b;
-            font-size: 12px;
-        }
-    </style>
+.summary {
+    position: relative;
 
-</head>
+    padding: 12px 16px;
 
-<body>
+    border: 1px solid var(--border);
+
+    border-radius: 8px;
+
+    background:
+        linear-gradient(
+            110deg,
+            rgba(129,140,248,.08),
+            rgba(255,255,255,.025)
+        );
+}
+
+.summary::before {
+    content: "";
+
+    position: absolute;
+
+    left: 0;
+    top: 9px;
+    bottom: 9px;
+
+    width: 2px;
+
+    background: linear-gradient(
+        180deg,
+        #818cf8,
+        #ec4899
+    );
+
+    border-radius: 3px;
+}
+
+.summary-text {
+    margin: 0;
+
+    padding-left: 4px;
+
+    color: var(--text-soft);
+
+    font-size: 11.5px;
+
+    line-height: 1.55;
+}
+
+.summary strong {
+    color: var(--text);
+}
+
+
+/* =========================================================
+   KEY METRICS
+========================================================= */
+
+.decision {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        1fr
+        1fr
+        1fr;
+
+    overflow: hidden;
+
+    border: 1px solid var(--border);
+
+    border-radius: 9px;
+
+    background: rgba(255,255,255,.025);
+}
+
+.decision-item {
+    position: relative;
+
+    padding: 12px 14px;
+
+    border-right: 1px solid var(--border-soft);
+}
+
+.decision-item:last-child {
+    border-right: none;
+}
+
+.decision-item:first-child::before {
+    content: "";
+
+    position: absolute;
+
+    left: 0;
+    top: 0;
+    bottom: 0;
+
+    width: 2px;
+
+    background: linear-gradient(
+        180deg,
+        #818cf8,
+        #ec4899
+    );
+}
+
+.decision-label {
+    color: var(--text-muted);
+
+    font-size: 8.5px;
+
+    font-weight: 600;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+}
+
+.decision-value {
+    margin-top: 5px;
+
+    color: var(--text);
+
+    font-size: 17px;
+
+    line-height: 1;
+
+    font-weight: 800;
+
+    letter-spacing: -.3px;
+}
+
+.decision-value.accent {
+    color: var(--accent);
+}
+
+.decision-value.verdict {
+    font-size: 13px;
+
+    letter-spacing: .2px;
+}
+
+.decision-sub {
+    margin-top: 4px;
+
+    color: var(--text-muted);
+
+    font-size: 9px;
+}
+
+
+/* =========================================================
+   TWO COLUMNS
+========================================================= */
+
+.two-columns {
+    display: grid;
+
+    grid-template-columns: 1fr 1fr;
+
+    gap: 34px;
+}
+
+.column {
+    min-width: 0;
+}
+
+
+/* =========================================================
+   DATA TABLE
+========================================================= */
+
+.data-table {
+    width: 100%;
+
+    border-collapse: collapse;
+}
+
+.data-table tr {
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.data-table tr:last-child {
+    border-bottom: none;
+}
+
+.data-table td {
+    padding: 6px 2px;
+}
+
+.data-label {
+    color: var(--text-muted);
+
+    font-size: 10.5px;
+}
+
+.data-value {
+    text-align: right;
+
+    color: var(--text);
+
+    font-size: 10.5px;
+
+    font-weight: 700;
+}
+
+.data-value.accent {
+    color: var(--accent);
+}
+
+
+/* =========================================================
+   SCORE
+========================================================= */
+
+.score-panel {
+    display: flex;
+
+    align-items: center;
+
+    gap: 16px;
+
+    padding: 12px 14px;
+
+    border: 1px solid var(--border);
+
+    border-radius: 8px;
+
+    background: var(--surface);
+}
+
+.score-ring {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    width: 62px;
+    height: 62px;
+
+    flex-shrink: 0;
+
+    border-radius: 50%;
+
+    background:
+        radial-gradient(
+            circle at center,
+            #171d3f 62%,
+            transparent 63%
+        ),
+        conic-gradient(
+            #818cf8 0deg,
+            #a5b4fc ${data.score * 3.6}deg,
+            rgba(255,255,255,.08) ${data.score * 3.6}deg,
+            rgba(255,255,255,.08) 360deg
+        );
+}
+
+.score-ring-value {
+    font-size: 17px;
+
+    font-weight: 800;
+
+    color: var(--text);
+}
+
+.score-ring-value span {
+    font-size: 9px;
+
+    color: var(--text-muted);
+}
+
+.score-description {
+    color: var(--text-soft);
+
+    font-size: 10.5px;
+
+    line-height: 1.5;
+}
+
+
+/* =========================================================
+   VERDICT
+========================================================= */
+
+.verdict-panel {
+    position: relative;
+
+    padding: 12px 15px;
+
+    overflow: hidden;
+
+    border: 1px solid var(--border);
+
+    border-radius: 8px;
+
+    background:
+        linear-gradient(
+            120deg,
+            rgba(129,140,248,.10),
+            rgba(236,72,153,.045)
+        );
+}
+
+.verdict-panel::after {
+    content: "";
+
+    position: absolute;
+
+    width: 100px;
+    height: 100px;
+
+    right: -45px;
+    top: -55px;
+
+    border-radius: 50%;
+
+    background: rgba(129,140,248,.08);
+}
+
+.verdict-label {
+    color: var(--text-muted);
+
+    font-size: 8.5px;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+}
+
+.verdict-value {
+    margin-top: 3px;
+
+    color: var(--text);
+
+    font-size: 21px;
+
+    line-height: 1.1;
+
+    font-weight: 800;
+}
+
+.verdict-description {
+    margin: 5px 0 0;
+
+    color: var(--text-soft);
+
+    font-size: 10.5px;
+
+    line-height: 1.45;
+}
+
+
+/* =========================================================
+   ESTIMATE
+========================================================= */
+
+.estimate {
+    padding: 13px 16px;
+
+    border: 1px solid var(--border);
+
+    border-radius: 8px;
+
+    background: var(--surface);
+}
+
+.estimate-main {
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: flex-end;
+}
+
+.estimate-value {
+    margin-top: 3px;
+
+    color: var(--text);
+
+    font-size: 25px;
+
+    line-height: 1;
+
+    font-weight: 800;
+}
+
+.estimate-range {
+    color: var(--text-soft);
+
+    font-size: 10px;
+}
+
+.range {
+    position: relative;
+
+    height: 5px;
+
+    margin: 13px 0 8px;
+
+    overflow: hidden;
+
+    border-radius: 20px;
+
+    background: rgba(255,255,255,.08);
+}
+
+.range-fill {
+    position: absolute;
+
+    left: 18%;
+    right: 18%;
+
+    height: 100%;
+
+    border-radius: 20px;
+
+    background: linear-gradient(
+        90deg,
+        #6366f1,
+        #a5b4fc,
+        #ec4899
+    );
+}
+
+.estimate-description {
+    margin: 0;
+
+    color: var(--text-muted);
+
+    font-size: 9.5px;
+}
+
+
+/* =========================================================
+   LISTS
+========================================================= */
+
+.clean-list {
+    margin: 0;
+
+    padding: 0;
+
+    list-style: none;
+}
+
+.clean-list li {
+    display: flex;
+
+    align-items: flex-start;
+
+    gap: 7px;
+
+    padding: 5px 0;
+
+    border-bottom: 1px solid var(--border-soft);
+
+    color: var(--text-soft);
+
+    font-size: 10.5px;
+
+    line-height: 1.45;
+}
+
+.clean-list li:last-child {
+    border-bottom: none;
+}
+
+.check {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    width: 16px;
+    height: 16px;
+
+    flex-shrink: 0;
+
+    border-radius: 50%;
+
+    background: rgba(134,239,172,.10);
+
+    color: var(--green);
+
+    font-size: 9px;
+
+    font-weight: 800;
+}
+
+.warning {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    width: 16px;
+    height: 16px;
+
+    flex-shrink: 0;
+
+    border-radius: 50%;
+
+    background: rgba(251,191,36,.10);
+
+    color: var(--orange);
+
+    font-size: 9px;
+
+    font-weight: 800;
+}
+
+
+/* =========================================================
+   CONCLUSION
+========================================================= */
+
+.conclusion {
+    position: relative;
+
+    margin-top: 15px;
+
+    padding: 14px 17px;
+
+    overflow: hidden;
+
+    border: 1px solid rgba(165,180,252,.18);
+
+    border-radius: 9px;
+
+    background:
+        linear-gradient(
+            115deg,
+            rgba(99,102,241,.13),
+            rgba(236,72,153,.055)
+        );
+}
+
+.conclusion::before {
+    content: "";
+
+    position: absolute;
+
+    top: -55px;
+    right: -35px;
+
+    width: 140px;
+    height: 140px;
+
+    border-radius: 50%;
+
+    background: rgba(165,180,252,.08);
+}
+
+.conclusion-title {
+    position: relative;
+
+    margin: 0 0 6px;
+
+    color: var(--text);
+
+    font-size: 13px;
+
+    font-weight: 750;
+}
+
+.conclusion p {
+    position: relative;
+
+    margin: 5px 0;
+
+    color: var(--text-soft);
+
+    font-size: 10.5px;
+
+    line-height: 1.5;
+}
+
+.conclusion strong {
+    color: var(--text);
+}
+
+
+/* =========================================================
+   METHODOLOGY
+========================================================= */
+
+.methodology {
+    margin-top: 12px;
+
+    padding-top: 9px;
+
+    border-top: 1px solid var(--border);
+
+    color: var(--text-muted);
+
+    font-size: 9px;
+
+    line-height: 1.45;
+}
+
+.methodology strong {
+    color: var(--text-soft);
+}
+
+
+/* =========================================================
+   FOOTER
+========================================================= */
+
+.footer {
+    display: flex;
+
+    justify-content: space-between;
+
+    margin-top: 9px;
+
+    padding-top: 7px;
+
+    border-top: 1px solid var(--border);
+
+    color: var(--text-muted);
+
+    font-size: 9px;
+}
+
+
+/* =========================================================
+   PAGE BREAK
+========================================================= */
+
+.page-break {
+    page-break-before: always;
+}
+
+</style>
+
+
+<!-- =====================================================
+     PAGE 1
+===================================================== -->
+
+<div class="page">
+
+
     <div class="header">
-        <div>
+
+        <div class="brand-wrapper">
+
             <div class="brand">
-                Rapport d'analyse
+                APPREXIA<span>.</span>
             </div>
 
             <div class="subtitle">
@@ -257,158 +1082,809 @@ export class ReportService {
 
         </div>
 
-        <img class="logo" src="data:image/png;base64,${logoBase64}" />
+        <img
+            class="logo"
+            src="data:image/png;base64,${logoBase64}"
+        />
+
     </div>
 
-    <div class="section">
-        <div class="card property-image-card" style="padding: 0;">
 
-            <div class="image-container">
+    <div class="report-tag">
+        Analyse immobilière · Intelligence décisionnelle
+    </div>
 
-                <img src="${data.imageUrl}" class="property-image" alt="Photo du bien" />
 
-                <div class="image-overlay">
+    <!-- PROPERTY -->
 
-                    <div class="overlay-title">
-                        ${data.title}
-                    </div>
+    <div class="property-hero">
 
-                    <div class="overlay-info">
-                        ${data.city}
-                        · ${data.surface} m²
-                        · ${data.askingPrice} €
-                    </div>
+        <div class="property-image-wrapper">
+
+            <img
+                src="${data.imageUrl}"
+                class="property-image"
+                alt="Photo du bien"
+            />
+
+        </div>
+
+
+        <div class="property-info">
+
+            <div class="property-kicker">
+                Bien analysé
+            </div>
+
+            <h1 class="property-title">
+                ${data.title}
+            </h1>
+
+            <div class="property-location">
+                ${data.city}
+            </div>
+
+
+            <div class="property-meta">
+
+                <div class="meta-item">
+
+                    <span class="meta-label">
+                        Type
+                    </span>
+
+                    <span class="meta-value">
+                        ${data.typeLocal ?? '—'}
+                    </span>
+
+                </div>
+
+
+                <div class="meta-item">
+
+                    <span class="meta-label">
+                        Surface
+                    </span>
+
+                    <span class="meta-value">
+                        ${data.surface} m²
+                    </span>
+
+                </div>
+
+
+                <div class="meta-item">
+
+                    <span class="meta-label">
+                        Prix affiché
+                    </span>
+
+                    <span class="meta-value">
+                        ${data.askingPrice} €
+                    </span>
 
                 </div>
 
             </div>
 
         </div>
+
     </div>
 
+
+    <!-- SUMMARY -->
+
     <div class="section">
-        <div class="card">
 
-            <h2 style="color: #a5b4fc">Résumé exécutif</h2>
+        <div class="section-heading">
+
+            <div class="section-number">
+                01
+            </div>
+
+            <h2 class="section-title">
+                Synthèse décisionnelle
+            </h2>
+
+            <div class="section-line"></div>
+
+        </div>
 
 
-            <p>
-                Ce bien obtient un <strong>score Apprexia de ${data.score}/100</strong>
-                avec un verdict <strong>${data.verdict}</strong>.
-            </p>
+        <div class="summary">
 
-            <p>
-                Le prix affiché est de <strong>${data.askingPrice} €</strong>,
-                alors que notre estimation se situe autour de
+            <p class="summary-text">
+
+                Ce bien obtient un
+                <strong>score Apprexia de ${data.score}/100</strong>
+                et un verdict
+                <strong>${data.verdict}</strong>.
+
+                Le prix affiché de
+                <strong>${data.askingPrice} €</strong>
+                est comparé à une valeur estimée de
                 <strong>${data.recommendedPrice} €</strong>.
-            </p>
 
-            <p>
                 ${
-                    data.negotiationAmount > 0
-                        ? `Une négociation d'environ ${data.negotiationAmount} € est recommandée.`
-                        : `Le prix semble cohérent avec le marché actuel.`
-                }
+          data.negotiationAmount > 0
+
+            ? `L'analyse identifie un potentiel de négociation
+                       d'environ <strong>${data.negotiationAmount} €</strong>.`
+
+            : `Le prix apparaît cohérent avec les références
+                       de marché disponibles.`
+        }
+
             </p>
 
         </div>
+
     </div>
+
+
+    <!-- KEY METRICS -->
+
     <div class="section">
-        <div class="card">
-            <h2 style="color: #a5b4fc">
-                ${data.title}
+
+        <div class="decision">
+
+
+            <div class="decision-item">
+
+                <div class="decision-label">
+                    Score Apprexia
+                </div>
+
+                <div class="decision-value accent">
+                    ${data.score}
+                    <span style="font-size:10px;color:#858eaa;">
+                        /100
+                    </span>
+                </div>
+
+                <div class="decision-sub">
+                    Niveau global
+                </div>
+
+            </div>
+
+
+            <div class="decision-item">
+
+                <div class="decision-label">
+                    Verdict
+                </div>
+
+                <div class="decision-value verdict">
+                    ${data.verdict}
+                </div>
+
+                <div class="decision-sub">
+                    Décision Apprexia
+                </div>
+
+            </div>
+
+
+            <div class="decision-item">
+
+                <div class="decision-label">
+                    Valeur estimée
+                </div>
+
+                <div class="decision-value">
+                    ${data.recommendedPrice} €
+                </div>
+
+                <div class="decision-sub">
+                    Estimation centrale
+                </div>
+
+            </div>
+
+
+            <div class="decision-item">
+
+                <div class="decision-label">
+                    Écart au marché
+                </div>
+
+                <div class="decision-value">
+                    ${data.negotiationPotential} %
+                </div>
+
+                <div class="decision-sub">
+                    Potentiel identifié
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- MARKET -->
+
+    <div class="section">
+
+        <div class="two-columns">
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        02
+                    </div>
+
+                    <h2 class="section-title">
+                        Position sur le marché
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <table class="data-table">
+
+                    <tr>
+
+                        <td class="data-label">
+                            Position
+                        </td>
+
+                        <td class="data-value accent">
+                            ${data.marketPosition}
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+                        <td class="data-label">
+                            Prix demandé
+                        </td>
+
+                        <td class="data-value">
+                            ${data.askingPrice} €
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+                        <td class="data-label">
+                            Valeur Apprexia
+                        </td>
+
+                        <td class="data-value">
+                            ${data.recommendedPrice} €
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+                        <td class="data-label">
+                            Écart identifié
+                        </td>
+
+                        <td class="data-value">
+                            ${data.negotiationPotential} %
+                        </td>
+
+                    </tr>
+
+                </table>
+
+            </div>
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        03
+                    </div>
+
+                    <h2 class="section-title">
+                        Négociation
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <table class="data-table">
+
+                    <tr>
+
+                        <td class="data-label">
+                            Offre indicative
+                        </td>
+
+                        <td class="data-value">
+                            ${data.recommendedPrice} €
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+                        <td class="data-label">
+                            Négociation possible
+                        </td>
+
+                        <td class="data-value accent">
+
+                            ${
+          data.negotiationAmount > 0
+            ? `${data.negotiationAmount} €`
+            : 'Aucune'
+        }
+
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+                        <td class="data-label">
+                            Prix affiché
+                        </td>
+
+                        <td class="data-value">
+                            ${data.askingPrice} €
+                        </td>
+
+                    </tr>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- SCORE / VERDICT -->
+
+    <div class="section">
+
+        <div class="two-columns">
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        04
+                    </div>
+
+                    <h2 class="section-title">
+                        Score Apprexia™
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <div class="score-panel">
+
+                    <div class="score-ring">
+
+                        <div class="score-ring-value">
+
+                            ${data.score}
+
+                            <span>
+                                /100
+                            </span>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="score-description">
+                        ${data.scoreExplanation}
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        05
+                    </div>
+
+                    <h2 class="section-title">
+                        Verdict
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <div class="verdict-panel">
+
+                    <div class="verdict-label">
+                        Décision Apprexia
+                    </div>
+
+                    <div class="verdict-value">
+                        ${data.verdict}
+                    </div>
+
+                    <p class="verdict-description">
+                        ${data.verdictExplanation}
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <div class="footer">
+
+        <span>
+            APPREXIA — Intelligence décisionnelle immobilière
+        </span>
+
+        <span>
+            Analyse confidentielle
+        </span>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     PAGE 2
+===================================================== -->
+
+<div class="page page-break">
+
+
+    <!-- ESTIMATION -->
+
+    <div class="section" style="margin-top:0;">
+
+        <div class="section-heading">
+
+            <div class="section-number">
+                06
+            </div>
+
+            <h2 class="section-title">
+                Estimation Apprexia
             </h2>
 
+            <div class="section-line"></div>
+
+        </div>
 
 
-            <div class="grid">
+        <div class="estimate">
 
+            <div class="estimate-main">
 
-                <div class="stat">
+                <div>
 
-                    <div class="label">
-                        LOCALISATION
+                    <div class="meta-label">
+                        Valeur estimée
                     </div>
 
-                    <div class="value">
-                        ${data.city}
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat">
-
-                    <div class="label">
-                        SURFACE
-                    </div>
-
-                    <div class="value">
-                        ${data.surface} m²
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat">
-
-                    <div class="label">
-                        PRIX DEMANDÉ
-                    </div>
-
-                    <div class="value">
-                        ${data.askingPrice} €
-                    </div>
-
-                </div>
-
-
-
-                <div class="stat">
-
-                    <div class="label">
-                        VALEUR APPREXIA
-                    </div>
-
-                    <div class="value">
+                    <div class="estimate-value">
                         ${data.recommendedPrice} €
                     </div>
 
                 </div>
 
 
+                <div class="estimate-range">
+
+                    ${data.estimatedValueLow}
+                    €
+                    &nbsp;—&nbsp;
+                    ${data.estimatedValueHigh}
+                    €
+
+                </div>
+
             </div>
 
 
-        </div>
-    </div>
-    <div class="section with-2-cards">
-        <div class="card" style="margin-right: 20px; min-height: 400px;">
-            <h2 style="color: #ec4899">
-                Apprexia Score™
-            </h2>
+            <div class="range">
 
+                <div class="range-fill"></div>
 
-            <div class="verdict">
-                ${data.score}<span style="font-size: 16px;">/100</span>
             </div>
 
-            <p>
-                ${data.scoreExplanation}
+
+            <p class="estimate-description">
+
+                Estimation construite à partir des références DVF,
+                des annonces comparables et des caractéristiques
+                du bien analysé.
+
             </p>
+
         </div>
-        <div class="card" style="min-height: 400px;">
-            <h2 style="color: #4ade80;">
-                Verdict
+
+    </div>
+
+
+    <!-- RENTAL -->
+
+    <div class="section">
+
+        <div class="two-columns">
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        07
+                    </div>
+
+                    <h2 class="section-title">
+                        Potentiel locatif
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <table class="data-table">
+
+                    <tr>
+
+                        <td class="data-label">
+                            Loyer mensuel estimé
+                        </td>
+
+                        <td class="data-value">
+                            ${data.estimatedRentMonthly ?? '—'} €
+                        </td>
+
+                    </tr>
+
+
+                    <tr>
+
+                        <td class="data-label">
+                            Rendement brut
+                        </td>
+
+                        <td class="data-value accent">
+                            ${data.grossYield ?? '—'} %
+                        </td>
+
+                    </tr>
+
+                </table>
+
+
+                <p
+                    style="
+                        margin:8px 0 0;
+                        color:#858eaa;
+                        font-size:10.5px;
+                        line-height:1.5;
+                    "
+                >
+                    ${data.yieldAnalysis}
+                </p>
+
+            </div>
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        08
+                    </div>
+
+                    <h2 class="section-title">
+                        Lecture du marché
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <p
+                    style="
+                        margin:0;
+                        color:#c2c8da;
+                        font-size:11px;
+                        line-height:1.55;
+                    "
+                >
+
+                    ${
+          data.marketPosition === 'SOUS_PRIX'
+
+            ? 'Le bien semble proposé sous les références du marché observées.'
+
+            : data.marketPosition === 'PRIX_MARCHE'
+
+              ? 'Le prix apparaît cohérent avec les références de marché disponibles.'
+
+              : 'Le prix affiché apparaît supérieur aux références disponibles.'
+        }
+
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- STRENGTHS / RISKS -->
+
+    <div class="section">
+
+        <div class="two-columns">
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        09
+                    </div>
+
+                    <h2 class="section-title">
+                        Points forts
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <ul class="clean-list">
+
+                    ${data.strengths
+
+          .map(
+
+            (item) => `
+
+                                <li>
+
+                                    <span class="check">
+                                        ✓
+                                    </span>
+
+                                    <span>
+                                        ${item}
+                                    </span>
+
+                                </li>
+
+                            `
+
+          )
+
+          .join('')}
+
+                </ul>
+
+            </div>
+
+
+            <div class="column">
+
+                <div class="section-heading">
+
+                    <div class="section-number">
+                        10
+                    </div>
+
+                    <h2 class="section-title">
+                        Points de vigilance
+                    </h2>
+
+                    <div class="section-line"></div>
+
+                </div>
+
+
+                <ul class="clean-list">
+
+                    ${data.risks
+
+          .map(
+
+            (item) => `
+
+                                <li>
+
+                                    <span class="warning">
+                                        !
+                                    </span>
+
+                                    <span>
+                                        ${item}
+                                    </span>
+
+                                </li>
+
+                            `
+
+          )
+
+          .join('')}
+
+                </ul>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- CONCLUSION -->
+
+    <div class="section">
+
+        <div class="section-heading">
+
+            <div class="section-number">
+                11
+            </div>
+
+            <h2 class="section-title">
+                Conclusion
             </h2>
 
+            <div class="section-line"></div>
+
+        </div>
 
 
-            <div class="verdict">
-                ${data.verdict}
-            </div>
+        <div class="conclusion">
+
+            <h2 class="conclusion-title">
+                Conclusion Apprexia
+            </h2>
 
 
             <p>
@@ -416,255 +1892,24 @@ export class ReportService {
             </p>
 
 
-        </div>
-    </div>
-    <div class="section">
-        <div class="card">
-
-
-            <h2 style="color: #a5b4fc">
-                Négociation recommandée
-            </h2>
-
-
-
-            <div class="grid">
-
-
-                <div class="stat">
-
-                    <div class="label">
-                        NÉGOCIATION POSSIBLE
-                    </div>
-
-                    <div class="value">
-                        ${data.negotiationAmount} €
-                    </div>
-
-
-                </div>
-
-
-
-                <div class="stat">
-
-                    <div class="label">
-                        ÉCART AU MARCHÉ
-                    </div>
-
-                    <div class="value">
-                        ${data.negotiationPotential} %
-                    </div>
-
-
-                </div>
-
-
-            </div>
-
-
-        </div>
-    </div>
-    <div class="section">
-        <div class="card">
-
-            <h2 style="color: #a5b4fc">Position sur le marché</h2>
-
-
-            <div class="grid">
-
-                <div class="stat">
-                    <div class="label">
-                        POSITION
-                    </div>
-
-                    <div class="value">
-                        ${data.marketPosition}
-                    </div>
-                </div>
-
-
-                <div class="stat">
-                    <div class="label">
-                        RISQUE
-                    </div>
-
-                    <div class="value" style="font-size: 28px;">
-                        ${data.riskLevel}<span style="font-size: 16px;">/100</span>
-                    </div>
-                </div>
-
-            </div>
-
-            <p>
-                ${
-                    data.marketPosition === 'SOUS_PRIX'
-                        ? 'Le bien semble proposé sous les références du marché.'
-                        : data.marketPosition === 'PRIX_MARCHE'
-                          ? 'Le prix est cohérent avec les références observées.'
-                          : 'Le prix affiché apparaît supérieur aux références disponibles.'
-                }
-            </p>
-
-        </div>
-    </div>
-
-    <div class="section">
-        <div class="card">
-
-            <h2 style="color: #ec4899">Estimation Apprexia</h2>
-
-
-            <div class="grid">
-
-                <div class="stat">
-
-                    <div class="label">
-                        FOURCHETTE BASSE
-                    </div>
-
-                    <div class="value">
-                        ${data.estimatedValueLow} €
-                    </div>
-
-                </div>
-
-                <div class="stat">
-
-                    <div class="label">
-                        FOURCHETTE HAUTE
-                    </div>
-
-                    <div class="value">
-                        ${data.estimatedValueHigh} €
-                    </div>
-
-                </div>
-
-            </div>
-
             <p>
 
-                Notre estimation repose sur les ventes DVF,
-                les annonces comparables
-                et les caractéristiques du bien.
-
-            </p>
-
-        </div>
-    </div>
-
-    <div class="section">
-        <div class="card">
-
-            <h2 style="color: #f9a8d4">Potentiel locatif</h2>
-
-
-            <div class="grid">
-
-                <div class="stat">
-
-                    <div class="label">
-                        LOYER ESTIMÉ
-                    </div>
-
-                    <div class="value">
-                        ${data.estimatedRentMonthly ?? '-'} €
-                    </div>
-
-                </div>
-
-
-                <div class="stat">
-
-                    <div class="label">
-                        RENDEMENT
-                    </div>
-
-                    <div class="value">
-                        ${data.grossYield ?? '-'} %
-                    </div>
-
-                </div>
-
-            </div>
-
-            <p>
-
-                ${data.yieldAnalysis}
-
-            </p>
-
-        </div>
-    </div>
-
-    <div class="section with-2-cards">
-        <div class="card" style="margin-right: 20px;">
-
-            <h2 style="color: #4ade80">Points forts</h2>
-
-
-            <ul>
-
-                ${data.strengths
-                    .map(
-                        (item) => `
-                <li style="margin-bottom:10px; list-style-type: none;">
-                    ✅ ${item}
-                </li>`,
-                    )
-                    .join('')}
-
-            </ul>
-
-        </div>
-        <div class="card">
-
-            <h2 style="color: #fbbf24">Points de vigilance</h2>
-
-
-            <ul>
-
-                ${data.risks
-                    .map(
-                        (item) => `
-                <li style="margin-bottom:10px; list-style-type: none;">
-                    ⚠️ ${item}
-                </li>`,
-                    )
-                    .join('')}
-
-            </ul>
-
-        </div>
-    </div>
-
-    <div class="section">
-
-        <div class="card">
-
-            <h2 style="color: #ec4899">Conclusion Apprexia</h2>
-
-
-            <p>
-
-                ${data.verdictExplanation}
-
-            </p>
-
-            <p>
-
-                Notre estimation situe la valeur du bien autour de
+                La valeur centrale estimée par Apprexia est de
                 <strong>${data.recommendedPrice} €</strong>.
 
                 ${
-                    data.negotiationAmount > 0
-                        ? `Une offre comprise entre
-                ${data.recommendedPrice} € et
-                ${data.askingPrice} €
-                semble cohérente au regard des données du marché.`
-                        : `Le prix apparaît cohérent avec les références disponibles.`
-                }
+          data.negotiationAmount > 0
+
+            ? `Une offre autour de
+                       <strong>${data.recommendedPrice} €</strong>
+                       apparaît cohérente au regard des références
+                       analysées, avec un potentiel de négociation
+                       estimé à
+                       <strong>${data.negotiationAmount} €</strong>.`
+
+            : `Le prix affiché apparaît cohérent avec les
+                       références disponibles sur le marché.`
+        }
 
             </p>
 
@@ -672,57 +1917,83 @@ export class ReportService {
 
     </div>
 
-    <div class="card">
 
-        <h2 style="color: #a5b4fc">À propos de cette analyse</h2>
+    <!-- METHODOLOGY -->
 
+    <div class="methodology">
 
-        <p>
+        <strong>À propos de cette analyse</strong><br>
 
-            Cette analyse est générée automatiquement par Apprexia à partir des données publiques DVF, des annonces
-            immobilières comparables, des estimations locatives et d'un modèle d'intelligence artificielle. Elle
-            constitue une aide à la décision et ne remplace pas l'expertise d'un professionnel de l'immobilier.
+        Cette analyse est générée automatiquement par Apprexia à partir
+        de données publiques DVF, de références immobilières comparables,
+        d'estimations locatives et de modèles d'intelligence artificielle.
 
-        </p>
+        Les résultats constituent une aide à la décision et ne remplacent
+        pas l'expertise ou l'avis d'un professionnel de l'immobilier.
 
     </div>
+
+
+    <!-- FOOTER -->
 
     <div class="footer">
-        Rapport généré automatiquement par Apprexia • L'intelligence artificielle au service de l'investissement
-        immobilier
+
+        <span>
+            APPREXIA — Intelligence décisionnelle immobilière
+        </span>
+
+        <span>
+            Rapport confidentiel
+        </span>
+
     </div>
-</body>
 
-</html>
+</div>
+
 `;
-        const chromiumDir = readdirSync('/ms-playwright').find((dir) => dir.startsWith('chromium-'));
+        let browser;
 
-        if (!chromiumDir) {
-            throw new Error('Chromium Playwright introuvable');
+        if (process.env.PDF_BROWSER === 'playwright') {
+            const chromiumDir = readdirSync('/ms-playwright').find((dir) => dir.startsWith('chromium-'));
+
+            if (!chromiumDir) {
+                throw new Error('Chromium Playwright introuvable');
+            }
+
+            const executablePath = `/ms-playwright/${chromiumDir}/chrome-linux64/chrome`;
+
+            if (!existsSync(executablePath)) {
+                throw new Error(`Chromium introuvable : ${executablePath}`);
+            }
+
+            browser = await puppeteer.launch({
+                executablePath,
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            });
+        } else {
+            browser = await puppeteer.launch({
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            });
         }
 
-        const executablePath = `/ms-playwright/${chromiumDir}/chrome-linux64/chrome`;
+        try {
+            const page = await browser.newPage();
 
-        if (!existsSync(executablePath)) {
-            throw new Error(`Chromium introuvable : ${executablePath}`);
+            await page.setContent(html, {
+                waitUntil: 'networkidle0',
+            });
+
+            await page.emulateMediaType('screen');
+
+            const pdf = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+            });
+
+            return Buffer.from(pdf);
+        } finally {
+            await browser.close();
         }
-
-        const browser = await puppeteer.launch({
-            executablePath: '/ms-playwright/chromium-1228/chrome-linux64/chrome',
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        });
-
-        const page = await browser.newPage();
-
-        await page.setContent(html);
-        await page.emulateMediaType('screen');
-        const pdf = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-        });
-
-        await browser.close();
-
-        return Buffer.from(pdf);
     }
 }
