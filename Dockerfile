@@ -4,6 +4,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PDF_BROWSER=playwright
 
 COPY package*.json ./
 

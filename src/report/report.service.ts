@@ -1206,14 +1206,12 @@ body {
                 <strong>${data.recommendedPrice} €</strong>.
 
                 ${
-          data.negotiationAmount > 0
-
-            ? `L'analyse identifie un potentiel de négociation
+                    data.negotiationAmount > 0
+                        ? `L'analyse identifie un potentiel de négociation
                        d'environ <strong>${data.negotiationAmount} €</strong>.`
-
-            : `Le prix apparaît cohérent avec les références
+                        : `Le prix apparaît cohérent avec les références
                        de marché disponibles.`
-        }
+                }
 
             </p>
 
@@ -1426,11 +1424,7 @@ body {
 
                         <td class="data-value accent">
 
-                            ${
-          data.negotiationAmount > 0
-            ? `${data.negotiationAmount} €`
-            : 'Aucune'
-        }
+                            ${data.negotiationAmount > 0 ? `${data.negotiationAmount} €` : 'Aucune'}
 
                         </td>
 
@@ -1734,16 +1728,12 @@ body {
                 >
 
                     ${
-          data.marketPosition === 'SOUS_PRIX'
-
-            ? 'Le bien semble proposé sous les références du marché observées.'
-
-            : data.marketPosition === 'PRIX_MARCHE'
-
-              ? 'Le prix apparaît cohérent avec les références de marché disponibles.'
-
-              : 'Le prix affiché apparaît supérieur aux références disponibles.'
-        }
+                        data.marketPosition === 'SOUS_PRIX'
+                            ? 'Le bien semble proposé sous les références du marché observées.'
+                            : data.marketPosition === 'PRIX_MARCHE'
+                              ? 'Le prix apparaît cohérent avec les références de marché disponibles.'
+                              : 'Le prix affiché apparaît supérieur aux références disponibles.'
+                    }
 
                 </p>
 
@@ -1782,9 +1772,8 @@ body {
 
                     ${data.strengths
 
-          .map(
-
-            (item) => `
+                        .map(
+                            (item) => `
 
                                 <li>
 
@@ -1798,11 +1787,10 @@ body {
 
                                 </li>
 
-                            `
+                            `,
+                        )
 
-          )
-
-          .join('')}
+                        .join('')}
 
                 </ul>
 
@@ -1830,9 +1818,8 @@ body {
 
                     ${data.risks
 
-          .map(
-
-            (item) => `
+                        .map(
+                            (item) => `
 
                                 <li>
 
@@ -1846,11 +1833,10 @@ body {
 
                                 </li>
 
-                            `
+                            `,
+                        )
 
-          )
-
-          .join('')}
+                        .join('')}
 
                 </ul>
 
@@ -1898,18 +1884,16 @@ body {
                 <strong>${data.recommendedPrice} €</strong>.
 
                 ${
-          data.negotiationAmount > 0
-
-            ? `Une offre autour de
+                    data.negotiationAmount > 0
+                        ? `Une offre autour de
                        <strong>${data.recommendedPrice} €</strong>
                        apparaît cohérente au regard des références
                        analysées, avec un potentiel de négociation
                        estimé à
                        <strong>${data.negotiationAmount} €</strong>.`
-
-            : `Le prix affiché apparaît cohérent avec les
+                        : `Le prix affiché apparaît cohérent avec les
                        références disponibles sur le marché.`
-        }
+                }
 
             </p>
 
@@ -1970,11 +1954,13 @@ body {
                 executablePath,
                 args: ['--no-sandbox', '--disable-setuid-sandbox'],
             });
-        } else {
+        } else if (process.env.PDF_BROWSER === 'puppeteer') {
             browser = await puppeteer.launch({
                 headless: true,
                 args: ['--no-sandbox', '--disable-setuid-sandbox'],
             });
+        } else {
+            throw new Error(`PDF_BROWSER invalide : ${process.env.PDF_BROWSER}`);
         }
 
         try {
