@@ -5,6 +5,7 @@ import { CreateAuthDto } from './dto/create-auth.dto';
 import { UpdateAuthDto } from './dto/update-auth.dto';
 
 import { AuthGuard } from '@nestjs/passport';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -25,7 +26,7 @@ export class AuthController {
      */
 
     @Get('google/callback')
-    @UseGuards(AuthGuard('google'))
+    @UseGuards(GoogleAuthGuard)
     async googleCallback(@Req() req, @Res() res) {
         const token = await this.authService.loginWithGoogle(req.user);
 
