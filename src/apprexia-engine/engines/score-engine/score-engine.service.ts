@@ -6,6 +6,7 @@ import { ConfidenceEngineService } from '../confidence-engine/confidence-engine.
 import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
 import { AmenityEngineService } from '../amenity-engine/amenity-engine.service';
 import { LiquidityEngineService } from '../liquidity-engine/liquidity-engine.service';
+import { EnergyEngineService } from '../energy-engine/energy-engine.service';
 
 @Injectable()
 export class ScoreEngineService {
@@ -15,21 +16,24 @@ export class ScoreEngineService {
         private readonly opportunityEngine: OpportunityEngineService,
         private readonly amenityEngine: AmenityEngineService,
         private readonly liquidityEngine: LiquidityEngineService,
+        private readonly energyEngine: EnergyEngineService,
     ) {}
 
     compute(context: EngineContext): ScoreResult {
         const analysis = context.analysis;
 
         // ======================================================
-        // 1. OPPORTUNITÉ PRIX (40 pts)
+        // 1. OPPORTUNITÉ PRIX (35 pts)
         // ======================================================
 
-        const opportunityScore = this.opportunityEngine.compute(
+        const opportunityRaw = this.opportunityEngine.compute(
             analysis.askingPrice,
             analysis.estimatedValueLow,
             analysis.estimatedValueHigh,
             analysis.dvfReferenceValue,
         );
+
+        const opportunityScore = Math.round((opportunityRaw / 40) * 35);
 
         // ======================================================
         // 2. RISQUE (20 pts)
@@ -44,36 +48,54 @@ export class ScoreEngineService {
         const yieldScore = this.yieldEngine.compute(analysis.grossYield, analysis.city);
 
         // ======================================================
-        // 4. PRESTATIONS (10 pts)
+        // 4. PERFORMANCE ÉNERGÉTIQUE (10 pts)
+        // ======================================================
+
+        const energyResult = this.energyEngine.compute({
+            dpe: analysis.dpe,
+            ges: analysis.ges,
+        });
+
+        const energyScore = Math.round((energyResult.score / 100) * 10);
+
+        // ======================================================
+        // 5. PRESTATIONS (10 pts)
         // ======================================================
 
         const amenitiesResult = this.amenityEngine.compute(analysis.propertyFeatures, analysis.surface);
 
-        // Conversion Amenity /100 => /10
         const amenitiesScore = Math.round((amenitiesResult.score / 100) * 10);
 
         // ======================================================
-        // 5. CONFIANCE DATA (10 pts)
+        // 6. CONFIANCE DATA (5 pts)
         // ======================================================
 
-        const confidenceScore = this.confidenceEngine.compute(context.dvf, context.apprexia);
+        const confidenceRaw = this.confidenceEngine.compute(context.dvf, context.apprexia);
+        const confidenceScore = Math.round((confidenceRaw / 10) * 5);
 
         // ======================================================
-        // 6. LIQUIDITÉ (5 pts)
+        // 7. LIQUIDITÉ (5 pts)
         // ======================================================
 
         const liquidityRaw = this.liquidityEngine.compute(context.dvf?.count ?? 0, analysis.city, analysis.surface);
 
-        // Conversion Liquidity /20 => /5
         const liquidityScore = Math.round((liquidityRaw / 20) * 5);
 
         // ======================================================
-        // SCORE FINAL
+        // SCORE FINAL /100
         // ======================================================
 
         const score = Math.min(
             100,
-            Math.round(opportunityScore + riskScore + yieldScore + amenitiesScore + confidenceScore + liquidityScore),
+            Math.round(
+                opportunityScore +
+                    riskScore +
+                    yieldScore +
+                    energyScore +
+                    amenitiesScore +
+                    confidenceScore +
+                    liquidityScore,
+            ),
         );
 
         return {
@@ -84,6 +106,8 @@ export class ScoreEngineService {
             riskScore,
 
             yieldScore,
+
+            energyScore,
 
             amenitiesScore: {
                 ...amenitiesResult,

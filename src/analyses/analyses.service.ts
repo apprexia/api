@@ -392,6 +392,8 @@ export class AnalysesService {
                 codePostal: this.normalizeCodePostal(metadata.codePostal),
                 typeLocal: metadata.typeLocal,
                 rooms: aiResult.rooms,
+                dpe: metadata.dpe ?? null,
+                ges: metadata.ges ?? null,
                 surface: aiResult.surface,
                 terrain: metadata.terrain,
                 score: aiResult.score,

@@ -4,209 +4,195 @@ import { AnalysisStatus } from '@prisma/client';
 
 @Injectable()
 export class AnalysisMarketService {
-  constructor(private prisma: PrismaService) {}
+    constructor(private prisma: PrismaService) {}
 
-  async getSimilarAnalyses(params: {
-    city: string;
-    codePostal?: string;
-    typeLocal: string;
-    surface: number;
-    terrain: number;
-  }) {
-    const { city, codePostal, typeLocal, surface, terrain } = params;
+    async getSimilarAnalyses(params: {
+        city: string;
+        codePostal?: string;
+        typeLocal: string;
+        surface: number;
+        terrain: number;
+    }) {
+        const { city, codePostal, typeLocal, surface, terrain } = params;
 
-    const normalizedCity = this.normalizeCommune(city, codePostal);
+        const normalizedCity = this.normalizeCommune(city, codePostal);
 
-    const normalizedType: 'Appartement' | 'Maison' | undefined = typeLocal
-      ?.toLowerCase()
-      .includes('appartement')
-      ? 'Appartement'
-      : typeLocal?.toLowerCase().includes('maison')
-        ? 'Maison'
-        : undefined;
+        const normalizedType: 'Appartement' | 'Maison' | undefined = typeLocal?.toLowerCase().includes('appartement')
+            ? 'Appartement'
+            : typeLocal?.toLowerCase().includes('maison')
+              ? 'Maison'
+              : undefined;
 
-    const tolerance = Math.max(surface * 0.3, 10);
+        const tolerance = Math.max(surface * 0.3, 10);
 
-    const minSurface = Math.max(5, surface - tolerance);
-    const maxSurface = surface + tolerance;
+        const minSurface = Math.max(5, surface - tolerance);
+        const maxSurface = surface + tolerance;
 
-    const baseWhere = {
-      status: AnalysisStatus.COMPLETED,
+        const baseWhere = {
+            status: AnalysisStatus.COMPLETED,
 
-      ...(normalizedType && {
-        typeLocal: normalizedType,
-      }),
+            ...(normalizedType && {
+                typeLocal: normalizedType,
+            }),
 
-      surface: {
-        gte: minSurface,
-        lte: maxSurface,
-      },
+            surface: {
+                gte: minSurface,
+                lte: maxSurface,
+            },
 
-      ...(terrain && {
-        terrain: {
-          gte: terrain * 0.5,
-          lte: terrain * 1.5,
-        },
-      }),
+            ...(terrain && {
+                terrain: {
+                    gte: terrain * 0.5,
+                    lte: terrain * 1.5,
+                },
+            }),
 
-      verdict: {
-        not: 'ERROR',
-      },
+            verdict: {
+                not: 'ERROR',
+            },
 
-      createdAt: {
-        gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
-      },
-    };
+            createdAt: {
+                gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
+            },
+        };
 
-    let analyses = await this.prisma.analysis.findMany({
-      where: {
-        ...baseWhere,
-        city: normalizedCity,
+        let analyses = await this.prisma.analysis.findMany({
+            where: {
+                ...baseWhere,
+                city: normalizedCity,
 
-        ...(codePostal && {
-          codePostal,
-        }),
-      },
+                ...(codePostal && {
+                    codePostal,
+                }),
+            },
 
-      select: {
-        surface: true,
-        createdAt: true,
+            select: {
+                surface: true,
+                createdAt: true,
 
-        score: true,
-        verdict: true,
+                score: true,
+                verdict: true,
 
-        askingPrice: true,
-        recommendedPrice: true,
+                askingPrice: true,
+                recommendedPrice: true,
 
-        grossYield: true,
-        negotiationAmount: true,
-      },
-    });
+                grossYield: true,
+                negotiationAmount: true,
+            },
+        });
 
-    if (!analyses.length) {
-      analyses = await this.prisma.analysis.findMany({
-        where: {
-          ...baseWhere,
-          city: normalizedCity,
-        },
+        if (!analyses.length) {
+            analyses = await this.prisma.analysis.findMany({
+                where: {
+                    ...baseWhere,
+                    city: normalizedCity,
+                },
 
-        select: {
-          surface: true,
-          createdAt: true,
+                select: {
+                    surface: true,
+                    createdAt: true,
 
-          score: true,
-          verdict: true,
+                    score: true,
+                    verdict: true,
 
-          askingPrice: true,
-          recommendedPrice: true,
+                    askingPrice: true,
+                    recommendedPrice: true,
 
-          grossYield: true,
-          negotiationAmount: true,
-        },
-      });
-    }
-
-    if (!analyses.length) {
-      return null;
-    }
-
-    // -------------------------------------------------
-    // On garde les analyses les plus similaires
-    // -------------------------------------------------
-
-    analyses.sort((a, b) => {
-      const aSurface = a.surface ?? surface;
-      const bSurface = b.surface ?? surface;
-
-      const surfaceDiff =
-        Math.abs(aSurface - surface) - Math.abs(bSurface - surface);
-
-      if (surfaceDiff !== 0) {
-        return surfaceDiff;
-      }
-
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-    const comparables = analyses
-      .filter((a): a is typeof a & { surface: number } => a.surface !== null)
-      .slice(0, 20);
-
-    // -------------------------------------------------
-    // Moyenne pondérée
-    // -------------------------------------------------
-
-    const weightedAverage = (
-      selector: (item: (typeof comparables)[number]) => number | null,
-    ) => {
-      let weightedSum = 0;
-      let totalWeight = 0;
-
-      for (const item of comparables) {
-        const value = selector(item);
-
-        if (value === null || value === undefined || isNaN(value)) {
-          continue;
+                    grossYield: true,
+                    negotiationAmount: true,
+                },
+            });
         }
 
-        const surfaceWeight = Math.exp(-Math.abs(item.surface - surface) / 15);
+        if (!analyses.length) {
+            return null;
+        }
 
-        const ageDays =
-          (Date.now() - new Date(item.createdAt).getTime()) /
-          (1000 * 60 * 60 * 24);
+        // -------------------------------------------------
+        // On garde les analyses les plus similaires
+        // -------------------------------------------------
 
-        const recencyWeight = Math.max(0.5, 1 - ageDays / 365);
+        analyses.sort((a, b) => {
+            const aSurface = a.surface ?? surface;
+            const bSurface = b.surface ?? surface;
 
-        const weight = surfaceWeight * recencyWeight;
+            const surfaceDiff = Math.abs(aSurface - surface) - Math.abs(bSurface - surface);
 
-        weightedSum += value * weight;
-        totalWeight += weight;
-      }
+            if (surfaceDiff !== 0) {
+                return surfaceDiff;
+            }
 
-      return totalWeight ? weightedSum / totalWeight : 0;
-    };
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
 
-    const averageAskingPrice = weightedAverage((a) => a.askingPrice);
+        const comparables = analyses
+            .filter((a): a is typeof a & { surface: number } => a.surface !== null)
+            .slice(0, 20);
 
-    const averageRecommendedPrice = weightedAverage((a) => a.recommendedPrice);
+        // -------------------------------------------------
+        // Moyenne pondérée
+        // -------------------------------------------------
 
-    const averageNegotiation = weightedAverage((a) => a.negotiationAmount);
+        const weightedAverage = (selector: (item: (typeof comparables)[number]) => number | null) => {
+            let weightedSum = 0;
+            let totalWeight = 0;
 
-    const averageYield = weightedAverage((a) => a.grossYield);
+            for (const item of comparables) {
+                const value = selector(item);
 
-    const averageScore = weightedAverage((a) => a.score);
+                if (value === null || value === undefined || isNaN(value)) {
+                    continue;
+                }
 
-    const averageDiscountPercent =
-      averageAskingPrice > 0
-        ? ((averageAskingPrice - averageRecommendedPrice) /
-            averageAskingPrice) *
-          100
-        : 0;
+                const surfaceWeight = Math.exp(-Math.abs(item.surface - surface) / 15);
 
-    const averageSurfaceDifference = comparables.length
-      ? comparables.reduce((sum, a) => sum + Math.abs(a.surface - surface), 0) /
-        comparables.length
-      : 0;
+                const ageDays = (Date.now() - new Date(item.createdAt).getTime()) / (1000 * 60 * 60 * 24);
 
-    let confidence = 40;
+                const recencyWeight = Math.max(0.5, 1 - ageDays / 365);
 
-    confidence += Math.min(30, comparables.length * 2);
+                const weight = surfaceWeight * recencyWeight;
 
-    if (averageSurfaceDifference < 5) {
-      confidence += 15;
-    }
+                weightedSum += value * weight;
+                totalWeight += weight;
+            }
 
-    if (codePostal) {
-      confidence += 10;
-    }
+            return totalWeight ? weightedSum / totalWeight : 0;
+        };
 
-    confidence = Math.min(95, Math.round(confidence));
+        const averageAskingPrice = weightedAverage((a) => a.askingPrice);
 
-    const strongComparablesCount = comparables.filter(
-      (a) => Math.abs(a.surface - surface) <= 10,
-    ).length;
+        const averageRecommendedPrice = weightedAverage((a) => a.recommendedPrice);
 
-    const comparisonSummary = `
+        const averageNegotiation = weightedAverage((a) => a.negotiationAmount);
+
+        const averageYield = weightedAverage((a) => a.grossYield);
+
+        const averageScore = weightedAverage((a) => a.score);
+
+        const averageDiscountPercent =
+            averageAskingPrice > 0 ? ((averageAskingPrice - averageRecommendedPrice) / averageAskingPrice) * 100 : 0;
+
+        const averageSurfaceDifference = comparables.length
+            ? comparables.reduce((sum, a) => sum + Math.abs(a.surface - surface), 0) / comparables.length
+            : 0;
+
+        let confidence = 40;
+
+        confidence += Math.min(30, comparables.length * 2);
+
+        if (averageSurfaceDifference < 5) {
+            confidence += 15;
+        }
+
+        if (codePostal) {
+            confidence += 10;
+        }
+
+        confidence = Math.min(95, Math.round(confidence));
+
+        const strongComparablesCount = comparables.filter((a) => Math.abs(a.surface - surface) <= 10).length;
+
+        const comparisonSummary = `
 ${comparables.length} biens similaires analysés.
 
 Surface moyenne comparable :
@@ -225,73 +211,75 @@ Niveau de confiance :
 ${confidence}%.
 `;
 
-    return {
-      count: comparables.length,
+        return {
+            count: comparables.length,
 
-      confidence,
+            confidence,
 
-      comparisonSummary,
+            comparisonSummary,
 
-      averageSurfaceDifference: Number(averageSurfaceDifference.toFixed(1)),
+            averageSurfaceDifference: Number(averageSurfaceDifference.toFixed(1)),
 
-      strongComparablesCount,
+            strongComparablesCount,
 
-      averageScore: Math.round(averageScore),
+            averageScore: Math.round(averageScore),
 
-      averageYield: Number(averageYield.toFixed(1)),
+            averageYield: Number(averageYield.toFixed(1)),
 
-      averageNegotiation: Math.round(averageNegotiation),
+            averageNegotiation: Math.round(averageNegotiation),
 
-      averageRecommendedPrice: Math.round(averageRecommendedPrice),
+            averageRecommendedPrice: Math.round(averageRecommendedPrice),
 
-      averageAskingPrice: Math.round(averageAskingPrice),
+            averageAskingPrice: Math.round(averageAskingPrice),
 
-      averageDiscountPercent: Number(averageDiscountPercent.toFixed(1)),
+            averageDiscountPercent: Number(averageDiscountPercent.toFixed(1)),
 
-      investir: comparables.filter((a) => a.verdict === 'INVESTIR').length,
+            investir: comparables.filter((a) => a.verdict === 'INVESTIR').length,
 
-      negocier: comparables.filter((a) => a.verdict === 'NEGOCIER').length,
+            favorable: comparables.filter((a) => a.verdict === 'FAVORABLE').length,
 
-      eviter: comparables.filter((a) => a.verdict === 'EVITER').length,
-    };
-  }
+            negocier: comparables.filter((a) => a.verdict === 'NEGOCIER').length,
 
-  private normalizeCommune(city: string, codePostal?: string): string {
-    if (!city) return '';
-
-    let normalizedCity = city
-      .trim()
-      .toUpperCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-
-    // ----------------------------
-    // 1. SUPPRESSION ARRONDISSEMENTS
-    // ----------------------------
-    normalizedCity = normalizedCity
-      .replace(/\b\d{1,2}(E|ER)?\b/g, '') // 4E, 03, etc
-      .replace(/ARRONDISSEMENT/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // ----------------------------
-    // 2. NORMALISATION GRANDES VILLES
-    // ----------------------------
-    if (normalizedCity.includes('PARIS')) {
-      return 'PARIS';
+            eviter: comparables.filter((a) => a.verdict === 'EVITER').length,
+        };
     }
 
-    if (normalizedCity.includes('LYON')) {
-      return 'LYON';
-    }
+    private normalizeCommune(city: string, codePostal?: string): string {
+        if (!city) return '';
 
-    if (normalizedCity.includes('MARSEILLE')) {
-      return 'MARSEILLE';
-    }
+        let normalizedCity = city
+            .trim()
+            .toUpperCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
 
-    // ----------------------------
-    // 3. DEFAULT
-    // ----------------------------
-    return normalizedCity;
-  }
+        // ----------------------------
+        // 1. SUPPRESSION ARRONDISSEMENTS
+        // ----------------------------
+        normalizedCity = normalizedCity
+            .replace(/\b\d{1,2}(E|ER)?\b/g, '') // 4E, 03, etc
+            .replace(/ARRONDISSEMENT/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // ----------------------------
+        // 2. NORMALISATION GRANDES VILLES
+        // ----------------------------
+        if (normalizedCity.includes('PARIS')) {
+            return 'PARIS';
+        }
+
+        if (normalizedCity.includes('LYON')) {
+            return 'LYON';
+        }
+
+        if (normalizedCity.includes('MARSEILLE')) {
+            return 'MARSEILLE';
+        }
+
+        // ----------------------------
+        // 3. DEFAULT
+        // ----------------------------
+        return normalizedCity;
+    }
 }

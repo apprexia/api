@@ -8,6 +8,7 @@ import { RentalEngineService } from './engines/rental-engine/rental-engine.servi
 import { AnalysisAiResult } from '../analyses/interfaces/analysis-ai-result.interface';
 import { PropertyValueAdjustmentEngineService } from './engines/property-value-adjustment/property-value-adjustment.service';
 import { CommuneEngineService } from './engines/commune-engine/commune-engine.service';
+import { EnergyEngineService } from './engines/energy-engine/energy-engine.service';
 
 @Injectable()
 export class ApprexiaEngineService {
@@ -19,6 +20,7 @@ export class ApprexiaEngineService {
         private readonly rentalEngine: RentalEngineService,
         private readonly propertyValueAdjustmentEngine: PropertyValueAdjustmentEngineService,
         private readonly communeEngine: CommuneEngineService,
+        private readonly energyEngine: EnergyEngineService,
     ) {}
 
     async evaluate(context: EngineContext): Promise<AnalysisAiResult> {
@@ -96,6 +98,17 @@ export class ApprexiaEngineService {
         const communeAnalysis = this.communeEngine.compute(context.commune);
 
         // ===============================
+        // 2.3 Performance énergétique
+        // ===============================
+
+        const energy = this.energyEngine.compute({
+            dpe: context.analysis.dpe,
+            ges: context.analysis.ges,
+        });
+
+        console.log('⚡ ENERGY SCORE RESULT', energy);
+
+        // ===============================
         // 3. Score
         // ===============================
 
@@ -108,6 +121,7 @@ export class ApprexiaEngineService {
 
                 grossYield: rental?.grossYield ?? null,
                 riskLevel: valuationContext.analysis.riskLevel ?? 0,
+                energy,
             },
         });
 
@@ -152,6 +166,12 @@ export class ApprexiaEngineService {
             verdict,
             marketPosition,
 
+            // ===============================
+            // Performance énergétique
+            // ===============================
+
+            energy,
+
             recommendedPrice: recommendation.recommendedPrice,
             negotiationAmount: recommendation.negotiationAmount,
             negotiationPotential: recommendation.negotiationPotential,
@@ -165,6 +185,7 @@ export class ApprexiaEngineService {
                     opportunity: scoreResult.opportunityScore,
                     risk: scoreResult.riskScore,
                     yield: scoreResult.yieldScore,
+                    energy: scoreResult.energyScore,
                     amenities: scoreResult.amenitiesScore.score,
                     confidence: scoreResult.confidenceScore,
                     liquidity: scoreResult.liquidityScore,

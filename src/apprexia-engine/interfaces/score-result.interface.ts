@@ -5,6 +5,7 @@ export interface ScoreResult {
     opportunityScore: number;
     riskScore: number;
     yieldScore: number;
+    energyScore: number;
     amenitiesScore: AmenityResult;
     confidenceScore: number;
     liquidityScore: number;

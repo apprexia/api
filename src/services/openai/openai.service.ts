@@ -10,7 +10,7 @@ import { PropertyFeatures } from '../meta-data-scrapper/interfaces/property-feat
 
 @Injectable()
 export class OpenaiService {
-    private readonly logger = new Logger();
+    private readonly logger = new Logger(OpenaiService.name);
 
     private openAI = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
@@ -61,6 +61,9 @@ Répartition :
 
 INVESTIR :
 ${apprexiaMarketData.investir}
+
+FAVORABLE :
+${apprexiaMarketData.favorable}
 
 NEGOCIER :
 ${apprexiaMarketData.negocier}
@@ -568,6 +571,12 @@ N'invente jamais une prestation qui n'apparaît pas dans cette liste ou dans la 
 Nombre de pièces :
 ${metadata.rooms ?? 0}
 
+DPE :
+${metadata.dpe ?? 0}
+
+GES :
+${metadata.ges ?? 0}
+
 Adresse rue :
 ${metadata.streetAddress ?? ''}
 
@@ -769,12 +778,6 @@ L'absence d'ascenseur, de terrasse, de balcon ou de vue mer ne peut jamais faire
 Le rendement locatif ne peut jamais faire perdre plus de 5 points.
 
 Un bien très sous-évalué doit toujours obtenir un score élevé, même si ses prestations sont simples.
-
-Le score doit être cohérent avec le verdict :
-
-- INVESTIR → généralement entre 80 et 100
-- NEGOCIER → généralement entre 60 et 79
-- EVITER → généralement entre 0 et 59
 
 Lorsque askingPrice dépasse estimatedValueHigh :
 
@@ -1182,12 +1185,15 @@ Le verdict doit être déterminé principalement par :
 3. Les prestations réellement présentes.
 4. Les risques identifiés.
 
+L'écart DVF calculé par Apprexia est fourni dans les données DVF :
 
-Calcul obligatoire :
+gapVsDvfPercent
 
-écartDVF =
-((askingPrice - dvfReferenceValue)
-/ dvfReferenceValue) × 100
+Cette valeur est calculée par le backend.
+
+NE JAMAIS recalculer cette valeur.
+
+Utilise directement gapVsDvfPercent pour appliquer les règles de verdict.
 
 
 ──────────────────────────────
@@ -1220,7 +1226,7 @@ ET
 
 Alors :
 
-verdict = PRIX_MARCHE
+verdict = FAVORABLE
 
 
 Le prix est cohérent avec le marché.
@@ -1303,16 +1309,16 @@ COHÉRENCE OBLIGATOIRE
 Le verdict doit rester cohérent avec score :
 
 INVESTIR :
-score généralement >= 80
+Score >= 80
 
-PRIX_MARCHE :
-score généralement entre 60 et 80
+FAVORABLE :
+Score >= 65
 
 NEGOCIER :
-score généralement entre 50 et 75
+Score >= 50
 
 EVITER :
-score généralement < 60
+Score < 50
 
 
 Une information inconnue ne doit jamais être considérée comme négative.
@@ -1551,6 +1557,8 @@ FORMAT JSON OBLIGATOIRE
 "imageUrl": "",
 "city": "",
 "rooms": 0,
+"dpe": null,
+"ges": null,
 "surface": 0,
 
 "score": 0,
@@ -1584,7 +1592,7 @@ FORMAT JSON OBLIGATOIRE
 
 "grossYield": null,
 "yieldLevel": null,
-"yieldAnalysis": ""
+"yieldAnalysis": "",
 
 "strengths": [],
 
@@ -1604,34 +1612,27 @@ Ne retourne jamais de texte avant ou après le JSON.
     private calculatePriceGap(askingPrice: number, marketData: DvfMarketData) {
         const { dvfReferenceValue, lowEstimate, highEstimate } = marketData;
 
-        const gapVsDvf = ((askingPrice - dvfReferenceValue) / dvfReferenceValue) * 100;
+        const gapVsDvf = dvfReferenceValue > 0 ? ((askingPrice - dvfReferenceValue) / dvfReferenceValue) * 100 : null;
 
-        const gapVsLow = ((askingPrice - lowEstimate) / lowEstimate) * 100;
+        const gapVsLow = lowEstimate > 0 ? ((askingPrice - lowEstimate) / lowEstimate) * 100 : null;
 
-        const gapVsHigh = ((askingPrice - highEstimate) / highEstimate) * 100;
+        const gapVsHigh = highEstimate > 0 ? ((askingPrice - highEstimate) / highEstimate) * 100 : null;
 
         return {
             askingPrice,
-
             dvfReferenceValue,
-
             lowEstimate,
-
             highEstimate,
 
-            // écart absolu
             amountVsDvf: askingPrice - dvfReferenceValue,
-
             amountVsLow: askingPrice - lowEstimate,
-
             amountVsHigh: askingPrice - highEstimate,
 
-            // écart %
-            gapVsDvfPercent: Number(gapVsDvf.toFixed(2)),
+            gapVsDvfPercent: gapVsDvf !== null ? Number(gapVsDvf.toFixed(2)) : null,
 
-            gapVsLowPercent: Number(gapVsLow.toFixed(2)),
+            gapVsLowPercent: gapVsLow !== null ? Number(gapVsLow.toFixed(2)) : null,
 
-            gapVsHighPercent: Number(gapVsHigh.toFixed(2)),
+            gapVsHighPercent: gapVsHigh !== null ? Number(gapVsHigh.toFixed(2)) : null,
 
             position:
                 askingPrice < lowEstimate
@@ -1659,6 +1660,9 @@ Ne retourne jamais de texte avant ou après le JSON.
             terrain?: number;
             rooms?: number;
 
+            dpe?: string | null;
+            ges?: string | null;
+
             propertyFeatures?: PropertyFeatures;
 
             price?: number;
@@ -1674,6 +1678,9 @@ Ne retourne jamais de texte avant ou après le JSON.
         terrain?: number;
         rooms?: number;
 
+        dpe?: string | null;
+        ges?: string | null;
+
         propertyFeatures?: PropertyFeatures;
 
         price?: number;
@@ -1683,62 +1690,541 @@ Ne retourne jamais de texte avant ou après le JSON.
         reason?: string;
     }> {
         const prompt = `
-Tu es un expert immobilier français spécialisé dans la validation des métadonnées extraites automatiquement depuis des annonces immobilières.
+    Tu es un expert français spécialisé dans la validation et l'extraction de métadonnées immobilières à partir d'annonces immobilières.
 
-Les informations fournies proviennent d'extracteurs automatiques.
-Elles sont généralement correctes mais peuvent contenir des erreurs.
+    Les informations fournies proviennent d'un extracteur automatique.
+    Elles sont généralement correctes mais peuvent contenir des erreurs.
 
-Ton rôle n'est PAS de tout réextraire.
-Tu dois uniquement vérifier la cohérence des données extraites avec l'annonce et corriger uniquement lorsqu'une preuve explicite existe.
+    Ton rôle est de :
 
-RÈGLES IMPORTANTES :
+      1. rechercher activement les informations importantes dans l'annonce ;
+    2. vérifier les valeurs déjà extraites ;
+    3. corriger uniquement lorsqu'une preuve explicite existe ;
+    4. extraire le DPE et le GES lorsqu'ils sont explicitement présents ;
+    5. ne jamais inventer une information absente.
+
+════════════════════════════════════
+    PRIORITÉ ABSOLUE : DPE ET GES
+════════════════════════════════════
+
+    La vérification du DPE et du GES est une priorité absolue.
+
+    Tu dois rechercher activement le DPE et le GES dans :
+
+      1. le titre ;
+    2. la description ;
+    3. le contenu complet de l'annonce ;
+    4. les données extraites automatiquement.
+
+    Tu dois extraire le DPE et le GES lorsqu'une classe énergétique
+    ou une classe d'émission est explicitement identifiable.
+
+    DPE = performance énergétique du logement.
+
+    GES = émissions de gaz à effet de serre / classe climat.
+
+    Les deux valeurs sont totalement indépendantes.
+
+    Valeurs autorisées :
+
+      A
+    B
+    C
+    D
+    E
+    F
+    G
+
+    IMPORTANT :
+
+      Ne jamais déduire le DPE.
+
+    Ne jamais déduire le GES.
+
+    Ne jamais calculer une classe à partir :
+
+- du chauffage ;
+- de l'énergie utilisée ;
+- de l'année de construction ;
+- de l'isolation ;
+- de la consommation ;
+- des émissions ;
+- du type de logement ;
+- d'une autre classe énergétique.
+
+──────────────────────────────
+    DPE
+──────────────────────────────
+
+    Si une classe A-G est explicitement associée au DPE,
+    retourne cette classe.
+
+    Exemples :
+
+      "DPE : D"
+=> dpe = "D"
+
+    "Classe énergie : D"
+=> dpe = "D"
+
+    "Classe énergétique D"
+=> dpe = "D"
+
+    "Performance énergétique : D"
+=> dpe = "D"
+
+──────────────────────────────
+    GES
+──────────────────────────────
+
+    Si une classe A-G est explicitement associée au GES,
+    retourne cette classe.
+
+    Exemples :
+
+      "GES : B"
+=> ges = "B"
+
+    "Classe climat : B"
+=> ges = "B"
+
+    "Émissions de gaz à effet de serre : B"
+=> ges = "B"
+
+──────────────────────────────
+    DPE ET GES SIMULTANÉS
+──────────────────────────────
+
+    Si l'annonce indique :
+
+    "DPE : D / GES : B"
+
+    alors :
+
+      dpe = "D"
+    ges = "B"
+
+    Si l'annonce indique :
+
+    "Classe énergie D"
+    "Classe climat B"
+
+    alors :
+
+      dpe = "D"
+    ges = "B"
+
+    Ne jamais inverser les deux valeurs.
+
+    Ne jamais utiliser le DPE pour renseigner le GES.
+
+    Ne jamais utiliser le GES pour renseigner le DPE.
+    
+    ════════════════════════════════════
+RÈGLE CRITIQUE DE DÉSAMBIGUÏSATION DPE / GES
+════════════════════════════════════
+
+Une classe A-G ne doit être attribuée au DPE ou au GES
+QUE SI la classe est explicitement reliée au bon indicateur
+dans le même contexte sémantique.
+
+La simple proximité entre une lettre A-G et les mots
+"DPE", "GES", "énergie", "émissions", "kWh" ou "CO₂"
+NE constitue PAS une preuve suffisante.
+
+IMPORTANT :
+
+Ne jamais supposer que :
+
+* la première classe A-G trouvée = DPE ;
+* la deuxième classe A-G trouvée = GES ;
+* une classe trouvée dans un bloc énergétique = DPE ;
+* une classe trouvée dans un autre bloc énergétique = GES.
+
+Chaque classe doit être validée individuellement.
+
+Exemple :
+
+"DPE : D"
+"GES : B"
+
+=> dpe = "D"
+=> ges = "B"
+
+Exemple :
+
+"Classe énergie : D"
+"Classe climat : B"
+
+=> dpe = "D"
+=> ges = "B"
+
+Exemple :
+
+"Consommation : 206 kWh/m²/an"
+"Émissions : 7 kg CO₂/m²/an"
+
+Sans classe A-G explicitement indiquée :
+
+=> dpe = null
+=> ges = null
+
+Ne jamais transformer les valeurs numériques de consommation
+ou d'émissions en classes A-G.
+
+Exemple interdit :
+
+"206 kWh/m²/an" + "7 kg CO₂/m²/an"
+
+=> NE PAS déduire DPE = D ou GES = B.
+
+Si une seule classe est explicitement identifiable :
+
+"DPE : D"
+mais aucune classe GES identifiable
+
+=> dpe = "D"
+=> ges = null
+
+Inversement :
+
+"GES : B"
+mais aucun DPE identifiable
+
+=> dpe = null
+=> ges = "B"
+
+Si le contexte ne permet pas de déterminer avec certitude
+si une classe correspond au DPE ou au GES :
+
+=> ne pas attribuer cette classe.
+
+Dans ce cas, conserver la valeur automatiquement extraite
+uniquement si celle-ci est cohérente et explicitement identifiable.
+Sinon retourner null.
+
+Il est préférable de retourner null plutôt que d'associer
+une classe au mauvais indicateur.
+
+
+──────────────────────────────
+    ABSENCE DE DPE / GES
+──────────────────────────────
+
+    Si aucune classe DPE A-G n'est explicitement identifiable :
+
+- si la valeur extraite automatiquement existe déjà et reste cohérente,
+    conserve-la ;
+- sinon retourne null.
+
+    Si aucune classe GES A-G n'est explicitement identifiable :
+
+- si la valeur extraite automatiquement existe déjà et reste cohérente,
+    conserve-la ;
+- sinon retourne null.
+
+    Ne transforme jamais :
+
+      "DPE en cours"
+    "DPE à réaliser"
+    "DPE vierge"
+    "DPE non communiqué"
+    "DPE inconnu"
+
+    en classe A-G.
+
+    Même règle pour le GES.
+
+    Les valeurs telles que :
+
+      "180 kWh/m²/an"
+    "6 kg CO₂/m²/an"
+
+    ne doivent PAS être transformées en classe A-G si aucune classe
+    n'est explicitement indiquée.
+
+──────────────────────────────
+    IMPORTANT
+──────────────────────────────
+
+    Si plusieurs DPE ou GES apparaissent dans l'annonce :
+
+- privilégie celui explicitement associé au bien vendu ;
+- ignore les exemples ;
+- ignore les autres logements ;
+- ignore les références générales de l'immeuble ;
+- ignore les informations concernant un autre bien.
+
+════════════════════════════════════
+    RÈGLES GÉNÉRALES
+════════════════════════════════════
 
 - Analyse uniquement les informations présentes dans l'annonce.
 - Ne jamais inventer une information absente.
 - Si une valeur semble correcte ou qu'il existe un doute, conserve la valeur extraite.
 - Ne crée jamais d'adresse, code postal ou surface sans preuve.
 - Ne modifie jamais un prix sauf erreur manifeste.
-- Une ville citée comme "proche de", "à côté de", "à 10 minutes de" n'est pas forcément la commune du bien.
-- Ignore les équipements proposés "en option", "en sus", "possibilité d'acquérir".
+- Une ville citée comme "proche de", "à côté de", "à 10 minutes de"
+    n'est pas forcément la commune du bien.
+- Ignore les équipements proposés "en option", "en sus",
+    "possibilité d'acquérir" ou "vendu séparément".
 - Ne transforme jamais une option en caractéristique du bien.
 
-TYPE DE BIEN :
+════════════════════════════════════
+    TYPE DE BIEN
+════════════════════════════════════
 
-- Vérifie que le typeLocal correspond réellement au bien vendu.
-- Exemple :
-  "Appartement avec possibilité d'acquérir une place de parking"
-  => typeLocal = "Appartement"
+    Vérifie que typeLocal correspond réellement au bien vendu.
 
-NORMALISATION COMMUNE :
+    Valeurs autorisées uniquement :
 
-- Toujours retourner la commune en MAJUSCULES.
-- Utiliser des tirets pour les noms composés.
-- Ne jamais utiliser d'abréviation.
+- Appartement
+- Maison
+- Terrain
+- Local commercial
+- Parking
+- Immeuble
+- Inconnu
 
-Exemples :
+    Normalisation :
 
-"Bussy-Saint-Georges" => "BUSSY-SAINT-GEORGES"
-"Saint-Raphaël" => "SAINT-RAPHAEL"
-"Aix-en-Provence" => "AIX-EN-PROVENCE"
+- Studio, T1, T2, T3, T4, F1, F2, F3, loft habitable
+=> Appartement
 
-URL :
+- Maison, villa, pavillon, maison individuelle
+=> Maison
 
-${input.url ?? ''}
+- Parcelle, terrain constructible, terrain nu
+=> Terrain
 
-TITRE :
+- Parking, box, garage vendu seul, emplacement vendu seul
+=> Parking
+
+- Local commercial, boutique, commerce
+=> Local commercial
+
+- Immeuble entier
+=> Immeuble
+
+    Ne jamais retourner :
+
+      Studio
+    T1
+    T2
+    T3
+    F1
+    F2
+    F3
+
+    dans typeLocal.
+
+    Un parking mentionné comme :
+
+- option
+- en sus
+- possibilité d'acquérir
+- à vendre séparément
+
+    ne doit jamais modifier typeLocal.
+
+    Exemple :
+
+      "Appartement avec possibilité d'acquérir une place de parking"
+
+=> typeLocal = "Appartement"
+
+════════════════════════════════════
+    NORMALISATION COMMUNE
+════════════════════════════════════
+
+    Toujours retourner la commune en MAJUSCULES.
+
+    Utiliser des tirets pour les noms composés.
+
+    Ne jamais utiliser d'abréviation.
+
+    Exemples :
+
+      "Bussy-Saint-Georges"
+=> "BUSSY-SAINT-GEORGES"
+
+    "Saint-Raphaël"
+=> "SAINT-RAPHAEL"
+
+    "Aix-en-Provence"
+=> "AIX-EN-PROVENCE"
+
+    Une ville simplement citée comme proche ou voisine
+    ne doit jamais être utilisée comme commune du bien.
+
+════════════════════════════════════
+    SURFACE
+════════════════════════════════════
+
+    surface = surface habitable du bien principal vendu.
+
+    Ne jamais utiliser :
+
+- surface du terrain ;
+- jardin ;
+- terrasse ;
+- balcon ;
+- cour ;
+- patio ;
+
+    comme surface habitable.
+
+    Exemple :
+
+      "Appartement 32 m² avec jardin de 200 m²"
+
+=> surface = 32
+=> terrain = null
+
+════════════════════════════════════
+    TERRAIN
+════════════════════════════════════
+
+    terrain = surface de la parcelle de terrain associée au bien.
+
+    Inclure uniquement :
+
+- terrain ;
+- parcelle ;
+- terrain constructible ;
+- surface de terrain d'une maison.
+
+    Ne jamais considérer comme terrain :
+
+- jardin d'appartement ;
+- terrasse ;
+- balcon ;
+- cour ;
+- patio ;
+- espace vert.
+
+    Un jardin privatif d'appartement n'est jamais un terrain.
+
+════════════════════════════════════
+    NOMBRE DE PIÈCES
+════════════════════════════════════
+
+    rooms = nombre de pièces principales du logement.
+
+    Un studio correspond généralement à :
+
+      rooms = 1
+
+    Ne jamais compter :
+
+- salle de bain ;
+- WC ;
+- couloir ;
+- dressing ;
+
+    comme pièces principales sauf si l'annonce les définit explicitement
+    comme pièces principales.
+
+════════════════════════════════════
+    ÉQUIPEMENTS
+════════════════════════════════════
+
+    propertyFeatures doit uniquement représenter les équipements
+    et caractéristiques réellement présents dans le bien vendu.
+
+    Ne jamais considérer une option comme acquise.
+
+    Exemples :
+
+      "Possibilité d'acquérir un parking"
+=> parking = false
+
+    "Parking inclus"
+=> parking = true
+
+    "Terrasse de 20 m²"
+=> terrasse = true
+
+    "Jardin privatif"
+=> jardin = true
+
+    Les termes marketing comme :
+
+- coup de cœur ;
+- charme ;
+- privilégié ;
+
+    ne suffisent pas à définir prestige.
+
+    prestige = true uniquement si l'annonce mentionne explicitement :
+
+- bien de prestige ;
+- résidence prestigieuse ;
+- luxe ;
+- haut de gamme ;
+- standing exceptionnel.
+
+════════════════════════════════════
+    PRIX
+════════════════════════════════════
+
+    Ne modifie jamais le prix extrait sauf erreur manifeste et explicite.
+
+    Ne jamais convertir un prix optionnel en prix du bien principal.
+
+    Exemple :
+
+      "Appartement 400 000 €, parking en sus 20 000 €"
+
+=> price = 400000
+
+    et non 420000.
+
+════════════════════════════════════
+    CORRECTION
+════════════════════════════════════
+
+    corrected = true uniquement lorsqu'une valeur extraite automatiquement
+    a réellement été modifiée.
+
+    Si toutes les données extraites sont correctes :
+
+      corrected = false
+
+    confidence doit être compris entre 0 et 1.
+
+    confidence représente le niveau de confiance global
+    dans les informations retournées.
+
+    reason doit expliquer brièvement les corrections effectuées.
+
+════════════════════════════════════
+    URL
+════════════════════════════════════
+
+    ${input.url ?? ''}
+
+════════════════════════════════════
+TITRE
+════════════════════════════════════
 
 ${input.title}
 
-DESCRIPTION :
+════════════════════════════════════
+DESCRIPTION
+════════════════════════════════════
 
 ${input.description}
 
-CONTENU COMPLET :
+════════════════════════════════════
+CONTENU COMPLET DE L'ANNONCE
+════════════════════════════════════
 
-${input.body?.substring(0, 4000) ?? ''}
+${input.body?.substring(0, 10000) ?? ''}
 
-
-DONNÉES EXTRAITES AUTOMATIQUEMENT :
+════════════════════════════════════
+DONNÉES EXTRAITES AUTOMATIQUEMENT
+════════════════════════════════════
 
 ${JSON.stringify(
     {
@@ -1754,6 +2240,9 @@ ${JSON.stringify(
 
         rooms: input.extracted.rooms,
 
+        dpe: input.extracted.dpe ?? null,
+        ges: input.extracted.ges ?? null,
+
         propertyFeatures: input.extracted.propertyFeatures,
 
         price: input.extracted.price,
@@ -1762,135 +2251,82 @@ ${JSON.stringify(
     2,
 )}
 
+════════════════════════════════════
+MISSION
+════════════════════════════════════
 
-MISSION :
+PRIORITÉ 1 :
+Extraire et valider le DPE.
 
-1. Vérifier la localisation.
-2. Vérifier le typeLocal.
-3. Vérifier la surface.
-4. Vérifier le terrain.
-5. Vérifier le nombre de pièces.
-6. Vérifier les équipements.
-7. Vérifier le prix.
-8. Corriger uniquement les erreurs certaines.
-9. Retourner uniquement un JSON valide.
+  PRIORITÉ 2 :
+Extraire et valider le GES.
 
+  PRIORITÉ 3 :
+Vérifier la localisation.
 
-FORMAT OBLIGATOIRE :
+  PRIORITÉ 4 :
+Vérifier le typeLocal.
+
+  PRIORITÉ 5 :
+Vérifier la surface.
+
+  PRIORITÉ 6 :
+Vérifier le terrain.
+
+  PRIORITÉ 7 :
+Vérifier le nombre de pièces.
+
+  PRIORITÉ 8 :
+Vérifier les équipements.
+
+  PRIORITÉ 9 :
+Vérifier le prix.
+
+  PRIORITÉ 10 :
+Corriger uniquement les erreurs certaines.
+
+  Retourne uniquement le JSON demandé.
+
+════════════════════════════════════
+FORMAT JSON OBLIGATOIRE
+════════════════════════════════════
 
 {
-  "location": {
+    "location": {
     "address": "",
-    "streetAddress": "",
-    "city": "",
-    "codePostal": ""
-  },
-  "typeLocal": "",
-  "surface": 0,
-  "terrain": 0,
-  "rooms": 0,
-  "price": 0,
+      "streetAddress": "",
+      "city": "",
+      "codePostal": ""
+},
+
+    "typeLocal": "",
+
+  "surface": null,
+  "terrain": null,
+  "rooms": null,
+
+  "dpe": null,
+  "ges": null,
+
+  "price": null,
+
   "propertyFeatures": {},
-  "corrected": false,
+
+    "corrected": false,
+
   "confidence": 0,
+
   "reason": ""
 }
 
-
-SIGNIFICATION :
-
-location :
-Localisation réelle du bien.
-- Retourner uniquement une localisation explicitement présente dans l'annonce.
-- Ne jamais utiliser une ville simplement citée comme proche ou voisine.
-
-typeLocal :
-Type principal réel du bien vendu.
-
-Valeurs autorisées uniquement :
-- Appartement
-- Maison
-- Terrain
-- Local commercial
-- Parking
-- Immeuble
-- Inconnu
-
-Règles de normalisation :
-- Studio, T1, T2, T3, F1, F2, F3, loft habitable → Appartement
-- Villa, pavillon, maison individuelle → Maison
-- Parcelle, terrain constructible → Terrain
-- Garage, emplacement de stationnement, box vendu seul → Parking
-
-Ne jamais retourner "Studio", "T1", "T2", "F2" ou une autre sous-catégorie dans typeLocal.
-
-RÈGLES DE NORMALISATION DU TYPE :
-
-- Studio, T1, T2, T3, T4, appartement ancien, appartement neuf => "Appartement"
-- Maison, villa, pavillon => "Maison"
-- Terrain constructible ou terrain nu => "Terrain"
-- Parking, box, garage vendu seul => "Parking"
-- Local commercial, boutique, commerce => "Local commercial"
-- Immeuble entier => "Immeuble"
-
-Attention :
-- Un parking mentionné comme "en option", "en sus", "possibilité d'acquérir" ou "à vendre séparément" ne doit jamais modifier le typeLocal.
-- Exemple :
-  "Appartement avec possibilité d'acquérir une place de parking"
-  => typeLocal = "Appartement"
-
-surface :
-Surface habitable du bien principal vendu.
-- Ne pas utiliser la surface d'un terrain, jardin ou extérieur comme surface habitable.
-- Exemple :
-  Appartement 32 m² avec jardin 200 m²
-  => surface = 32
-  => terrain = 200
-
-terrain :
-Surface extérieure privative liée au bien.
-- Jardin, terrain, parcelle, espace extérieur privatif.
-- Ne pas confondre avec terrasse ou balcon.
-
-RÈGLES SUR LES SURFACES EXTÉRIEURES :
-
-- Un jardin privatif d'appartement n'est jamais un terrain.
-- Une terrasse, un balcon, une cour ou un jardin ne doivent jamais être retournés dans le champ terrain.
-- Le champ terrain doit être renseigné uniquement si l'annonce indique une parcelle de terrain, un terrain constructible ou une maison avec une surface de terrain. 
-
-rooms :
-Nombre de pièces principales du logement.
-- Un studio correspond généralement à 1 pièce.
-
-propertyFeatures :
-Équipements et caractéristiques réellement présents dans le bien.
-
-Règles importantes :
-- Ne jamais considérer une option comme un équipement acquis.
-- "Possibilité d'acquérir un parking" => parking=false.
-- "Terrasse de 20 m²" => terrasse=true.
-- "Jardin privatif" => jardin=true.
-- Les termes marketing comme "coup de cœur", "charme", "privilégié" ne suffisent pas pour prestige.
-
-prestige=true uniquement si l'annonce mentionne explicitement :
-- bien de prestige
-- résidence prestigieuse
-- luxe
-- haut de gamme
-- standing exceptionnel
-
-corrected :
-true uniquement si une information extraite automatiquement a été modifiée.
-
-confidence :
-Niveau de confiance entre 0 et 1.
-
-reason :
-Explication courte des corrections effectuées.
-
-
-Retourne uniquement le JSON.
-`;
+IMPORTANT :
+- Retourne null lorsqu'une donnée n'est pas connue.
+- Ne retourne jamais une classe DPE ou GES inventée.
+- DPE et GES doivent toujours être indépendants.
+- Retourne uniquement du JSON valide.
+- Aucun markdown.
+- Aucun texte avant ou après le JSON.
+  `;
 
         const response = await this.openAI.chat.completions.create({
             model: 'gpt-4.1-mini',
@@ -1901,7 +2337,8 @@ Retourne uniquement le JSON.
             messages: [
                 {
                     role: 'system',
-                    content: 'Tu es un expert français de validation de métadonnées immobilières.',
+                    content:
+                        'Tu es un expert français de validation et d’extraction de métadonnées immobilières. La priorité absolue est l’identification correcte du DPE et du GES.',
                 },
                 {
                     role: 'user',
@@ -1923,8 +2360,10 @@ Retourne uniquement le JSON.
 
                 surface: input.extracted.surface,
                 terrain: input.extracted.terrain,
-
                 rooms: input.extracted.rooms,
+
+                dpe: input.extracted.dpe ?? null,
+                ges: input.extracted.ges ?? null,
 
                 propertyFeatures: input.extracted.propertyFeatures,
 
@@ -1958,13 +2397,17 @@ Retourne uniquement le JSON.
 
                 rooms: result.rooms ?? input.extracted.rooms,
 
+                dpe: result.dpe ?? input.extracted.dpe ?? null,
+
+                ges: result.ges ?? input.extracted.ges ?? null,
+
                 propertyFeatures: result.propertyFeatures ?? input.extracted.propertyFeatures,
 
                 price: result.price ?? input.extracted.price,
 
                 corrected: result.corrected ?? false,
 
-                confidence: result.confidence ?? 0,
+                confidence: typeof result.confidence === 'number' ? Math.min(1, Math.max(0, result.confidence)) : 0,
 
                 reason: result.reason,
             };
@@ -1981,8 +2424,10 @@ Retourne uniquement le JSON.
 
                 surface: input.extracted.surface,
                 terrain: input.extracted.terrain,
-
                 rooms: input.extracted.rooms,
+
+                dpe: input.extracted.dpe ?? null,
+                ges: input.extracted.ges ?? null,
 
                 propertyFeatures: input.extracted.propertyFeatures,
 
@@ -2002,40 +2447,36 @@ Retourne uniquement le JSON.
 
         return (
             city
+                .trim()
 
-                // abréviations communes
+                // Paris 15e / Paris 15ème / Paris 15eme
+                .replace(/\s+\d{1,2}(?:er|e|ème|eme)\b/gi, '')
+
+                // Abréviations
                 .replace(/\bST\b/gi, 'SAINT')
                 .replace(/\bSTE\b/gi, 'SAINTE')
 
-                // suppression arrondissements complets
-                .replace(/\b\d{1,2}(?:ER|E|EME|ÈME)?\b/gi, '')
+                // Arrondissement explicite
+                .replace(/\s+\d{1,2}(?:er|e|ème|eme)?\s+ARRONDISSEMENT\b/gi, '')
 
-                // suppression suffixe restant après suppression du chiffre
-                .replace(/\b(ER|EME|ÈME|E)\b/gi, '')
-
-                .replace(/\bARRONDISSEMENT\b/gi, '')
-
-                // suppression accents
+                // Accents
                 .normalize('NFD')
                 .replace(/[\u0300-\u036f]/g, '')
 
-                // apostrophes
+                // Apostrophes
                 .replace(/['’]/g, ' ')
 
-                // caractères inutiles
-                .replace(/[^A-Za-z\s'-]/g, '')
+                // Caractères inutiles
+                .replace(/[^A-Za-z\s-]/g, '')
 
-                // espaces
+                // Espaces
                 .replace(/\s+/g, ' ')
                 .trim()
 
-                // majuscules
                 .toUpperCase()
 
-                // format DVF
+                // Format DVF
                 .replace(/\s+/g, '-')
-
-                // nettoyage final
                 .replace(/-+/g, '-')
                 .replace(/^-|-$/g, '')
         );

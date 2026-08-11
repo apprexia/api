@@ -18,34 +18,37 @@ import { HttpModule } from '@nestjs/axios';
 import { LocationEngineService } from './engines/location-engine/location-engine.service';
 import { GeocodingProviderService } from './providers/geocoding-provider/geocoding-provider.service';
 import { CommuneEngineService } from './engines/commune-engine/commune-engine.service';
+import { EnergyEngineService } from './engines/energy-engine/energy-engine.service';
 
 @Module({
-  imports: [HttpModule, RentalMarketModule],
-  providers: [
-    ApprexiaEngineService,
-    ScoreEngineService,
-    VerdictEngineService,
-    OpportunityEngineService,
-    AmenityEngineService,
-    LiquidityEngineService,
-    NegotiationEngineService,
-    MarketPositionEngineService,
-    RentalEngineService,
-    ConfidenceEngineService,
-    RecommendedPriceEngineService,
-    YieldEngineService,
-    PropertyValueAdjustmentEngineService,
-    LocationEngineService,
-    LocationProviderService,
-    GeocodingProviderService,
-    CommuneEngineService,
-  ],
-  exports: [
-    ApprexiaEngineService,
-    LocationEngineService,
-    LocationProviderService,
-    GeocodingProviderService,
-    AmenityEngineService,
-  ],
+    imports: [HttpModule, RentalMarketModule],
+    providers: [
+        ApprexiaEngineService,
+        ScoreEngineService,
+        VerdictEngineService,
+        OpportunityEngineService,
+        AmenityEngineService,
+        LiquidityEngineService,
+        NegotiationEngineService,
+        MarketPositionEngineService,
+        RentalEngineService,
+        ConfidenceEngineService,
+        RecommendedPriceEngineService,
+        YieldEngineService,
+        PropertyValueAdjustmentEngineService,
+        LocationEngineService,
+        LocationProviderService,
+        GeocodingProviderService,
+        CommuneEngineService,
+        EnergyEngineService,
+    ],
+    exports: [
+        ApprexiaEngineService,
+        LocationEngineService,
+        LocationProviderService,
+        GeocodingProviderService,
+        AmenityEngineService,
+        EnergyEngineService,
+    ],
 })
 export class ApprexiaEngineModule {}

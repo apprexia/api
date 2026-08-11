@@ -52,6 +52,7 @@ export interface ListingMetadata {
 
     condition?: string;
     dpe?: string;
+    ges?: string;
 
     propertyFeatures?: PropertyFeatures;
     featureLabels?: string[];
@@ -123,7 +124,9 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
     }
 
     async onModuleDestroy() {
-        await this.browser.close();
+        if (this.browser?.isConnected()) {
+            await this.browser.close();
+        }
     }
 
     async scrape(url: string): Promise<ListingMetadata> {
@@ -179,9 +182,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             },
 
             locale: 'fr-FR',
-
             timezoneId: 'Europe/Paris',
-
             javaScriptEnabled: true,
         });
 
@@ -194,6 +195,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             });
 
             console.log('PAGE TITLE:', await page.title());
+            console.log('PAGE URL:', page.url());
 
             await page.waitForTimeout(5000);
 
@@ -209,6 +211,8 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             if (isChallenge) {
                 console.log('⚠️ Challenge anti-bot détecté');
 
+                console.log('⏳ Attente résolution challenge...');
+
                 await page.waitForTimeout(30000);
 
                 console.log('URL après challenge:', page.url());
@@ -217,27 +221,32 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
                 html = await page.content();
             }
 
-            await page.goto(url, {
-                waitUntil: 'domcontentloaded',
-                timeout: 30000,
-            });
+            // 🔎 Vérification APRÈS l'attente
+            const finalTitle = await page.title();
+
+            console.log('FINAL TITLE:', finalTitle);
+            console.log('FINAL URL:', page.url());
+
+            const finalHtml = html.toLowerCase();
+
+            if (
+                finalHtml.includes('captcha-delivery.com') ||
+                finalHtml.includes('datadome') ||
+                finalHtml.includes('just a moment') ||
+                finalHtml.includes('enable javascript and cookies')
+            ) {
+                await page.screenshot({
+                    path: 'logic-immo-debug.png',
+                    fullPage: true,
+                });
+
+                throw new Error('Challenge anti-bot non résolu');
+            }
 
             await page.screenshot({
                 path: 'logic-immo-debug.png',
                 fullPage: true,
             });
-
-            if (html.includes('captcha-delivery.com') || html.includes('DataDome') || html.includes('datadome')) {
-                throw new Error('DataDome non résolu');
-            }
-
-            const finalTitle = await page.title();
-
-            console.log('FINAL TITLE:', finalTitle);
-
-            if (html.includes('Just a moment') || html.includes('Enable JavaScript and cookies')) {
-                throw new Error('Cloudflare challenge non résolu');
-            }
 
             return {
                 ...(await this.extractMetadata(html, url)),
@@ -267,15 +276,38 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
 
         const images: string[] = this.extractImages(listing, ogImage, $);
 
-        // Texte complet disponible pour les fallback
+        const scriptText: string[] = [];
+        const scriptObjects: any[] = [];
+
+        $('script').each((_, element) => {
+            const content = $(element).html();
+
+            if (!content) {
+                return;
+            }
+
+            // Conserve tous les scripts pour le fallback fullText
+            scriptText.push(content);
+
+            // Essaie de parser les scripts JSON
+            try {
+                const parsed = JSON.parse(content);
+                scriptObjects.push(parsed);
+            } catch {
+                // Script non JSON, on ignore
+            }
+        });
+
         const fullText = `
-      ${title}
-      ${description}
-      ${$('title').text()}
-      ${$('meta[property="og:title"]').attr('content') ?? ''}
-      ${$('meta[property="og:description"]').attr('content') ?? ''}
-      ${$('body').text()}
-    `;
+        ${title}
+        ${description}
+        ${$('title').text()}
+        ${$('meta[property="og:title"]').attr('content') ?? ''}
+        ${$('meta[property="og:description"]').attr('content') ?? ''}
+        ${$('body').text()}
+        ${scriptText.join('\n')}
+        `;
+
         const price = this.extractPriceFromAllSources({
             listing,
             title: $('title').text(),
@@ -290,12 +322,112 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         const propertyFeatures = this.extractPropertyFeatures(title, description);
         const rooms = this.extractRooms(title);
 
+        // --------------------------------------------------
+        // ENERGY : DPE / GES
+        // --------------------------------------------------
+
+        let dpe: string | undefined;
+        let ges: string | undefined;
+
+        // --------------------------------------------------
+        // 1. PRIMARY : JSON OBJECTS
+        // --------------------------------------------------
+
+        for (const data of scriptObjects) {
+            const jsonString = JSON.stringify(data);
+
+            if (
+                jsonString.includes('fr_energy_after_2021') ||
+                jsonString.includes('fr_ghg_after_2021') ||
+                jsonString.includes('efficiencyclass') ||
+                jsonString.includes('"dpe"') ||
+                jsonString.includes('"ges"')
+            ) {
+                console.log('🔥🔥 ENERGY JSON TROUVÉ 🔥🔥');
+                console.log(jsonString.substring(0, 10000));
+            }
+
+            const energy = this.extractEnergyFromObject(data);
+
+            if (!dpe && energy.dpe) {
+                dpe = energy.dpe;
+            }
+
+            if (!ges && energy.ges) {
+                ges = energy.ges;
+            }
+
+            if (dpe && ges) {
+                break;
+            }
+        }
+
+        // --------------------------------------------------
+        // 2. HTML STRUCTURÉ
+        // L'adresse : .dpe.dpe-c / .ges.ges-a
+        // --------------------------------------------------
+
+        if (!dpe || !ges) {
+            const htmlEnergy = this.extractEnergyFromHtml($);
+
+            if (!dpe && htmlEnergy.dpe) {
+                dpe = htmlEnergy.dpe;
+            }
+
+            if (!ges && htmlEnergy.ges) {
+                ges = htmlEnergy.ges;
+            }
+
+            console.log('🔥 HTML ENERGY');
+            console.log('🔥 DPE:', htmlEnergy.dpe ?? 'NON TROUVÉ');
+            console.log('🔥 GES:', htmlEnergy.ges ?? 'NON TROUVÉ');
+        }
+
+        // --------------------------------------------------
+        // 3. FALLBACK : FULL TEXT
+        // --------------------------------------------------
+
+        if (!dpe || !ges) {
+            const fallbackEnergy = this.extractEnergyRatings(fullText);
+
+            if (!dpe && fallbackEnergy.dpe) {
+                dpe = fallbackEnergy.dpe;
+            }
+
+            if (!ges && fallbackEnergy.ges) {
+                ges = fallbackEnergy.ges;
+            }
+        }
+
+        // --------------------------------------------------
+        // 4. FINAL VALIDATION
+        // --------------------------------------------------
+
+        dpe = this.normalizeEnergyRating(dpe);
+        ges = this.normalizeEnergyRating(ges);
+
+        // --------------------------------------------------
+        // DEBUG
+        // --------------------------------------------------
+
+        console.log('----------------------------------------');
+        console.log('🔥 ENERGY EXTRACTION');
+        console.log('🔥 DPE EXTRAIT :', dpe ?? 'NON TROUVÉ');
+        console.log('🔥 GES EXTRAIT :', ges ?? 'NON TROUVÉ');
+        console.log('🔥 JSON OBJECTS :', scriptObjects.length);
+        console.log('----------------------------------------');
+
         const location = await this.extractLocation({
             listing,
             title,
             description,
             url,
         });
+        console.log('========================================');
+        console.log('🔥 AVANT OPENAI ENERGY');
+        console.log('🔥 DPE:', dpe);
+        console.log('🔥 GES:', ges);
+        console.log('========================================');
 
         const verified = await this.openAiService.verifyExtractedMetadata({
             url,
@@ -309,6 +441,8 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
                 surface,
                 terrain,
                 rooms,
+                dpe,
+                ges,
 
                 propertyFeatures,
 
@@ -316,6 +450,13 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             },
         });
 
+        console.log('========================================');
+        console.log('🔥 APRÈS OPENAI ENERGY');
+        console.log('🔥 VERIFIED DPE:', verified.dpe);
+        console.log('🔥 VERIFIED GES:', verified.ges);
+        console.log('🔥 ORIGINAL DPE:', dpe);
+        console.log('🔥 ORIGINAL GES:', ges);
+        console.log('========================================');
         console.log('verifyExtractedMetadata', verified);
 
         return {
@@ -335,6 +476,8 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             terrain: verified.terrain ?? terrain,
             typeLocal: verified.typeLocal,
             rooms: verified.rooms,
+            dpe: verified.dpe ?? dpe,
+            ges: verified.ges ?? ges,
 
             propertyFeatures: verified.propertyFeatures,
         };
@@ -1207,5 +1350,831 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         }
 
         return undefined;
+    }
+
+    private extractEnergyFromHtml($: CheerioAPI) {
+        let dpe: string | undefined;
+        let ges: string | undefined;
+
+        // ==================================================
+        // 1. LADRESSE
+        // .dpe.dpe-c
+        // .ges.ges-a
+        // ==================================================
+
+        const dpeElement = $('.dpe[class*="dpe-"]').first();
+
+        if (dpeElement.length) {
+            const classes = dpeElement.attr('class') ?? '';
+
+            const match = classes.match(/\bdpe-([a-g])\b/i);
+
+            if (match?.[1]) {
+                dpe = this.normalizeEnergyRating(match[1]);
+            }
+        }
+
+        const gesElement = $('.ges[class*="ges-"]').first();
+
+        if (gesElement.length) {
+            const classes = gesElement.attr('class') ?? '';
+
+            const match = classes.match(/\bges-([a-g])\b/i);
+
+            if (match?.[1]) {
+                ges = this.normalizeEnergyRating(match[1]);
+            }
+        }
+
+        // ==================================================
+        // 2. PAP
+        // .energy-indice li.active
+        // .ges-indice li.active
+        // ==================================================
+
+        if (!dpe) {
+            const activeDpe = $('.energy-indice li.active').first().text().trim();
+
+            dpe = this.normalizeEnergyRating(activeDpe);
+        }
+
+        if (!ges) {
+            const activeGes = $('.ges-indice li.active').first().text().trim();
+
+            ges = this.normalizeEnergyRating(activeGes);
+        }
+
+        // ==================================================
+        // 3. ORPI - DPE
+        // ==================================================
+
+        if (!dpe) {
+            $('ul.c-dpe').each((_, element) => {
+                if (dpe) {
+                    return;
+                }
+
+                // On exclut explicitement le bloc GES
+                if ($(element).hasClass('c-dpe--ges')) {
+                    return;
+                }
+
+                const active = $(element)
+                    .find('li')
+                    .filter((_, li) => {
+                        const className = $(li).attr('class') ?? '';
+                        return className.includes('c-dpe__index--active');
+                    })
+                    .first();
+
+                const text = active.clone().children().remove().end().text().trim();
+
+                const rating = this.normalizeEnergyRating(text.charAt(0));
+
+                console.log('🔥 ORPI DPE HTML TEXT:', text);
+                console.log('🔥 ORPI DPE HTML RATING:', rating);
+
+                if (rating) {
+                    dpe = rating;
+                }
+            });
+        }
+
+        // ==================================================
+        // ORPI - GES
+        // ==================================================
+
+        if (!ges) {
+            $('ul.c-dpe--ges').each((_, element) => {
+                if (ges) {
+                    return;
+                }
+
+                const active = $(element)
+                    .find('li')
+                    .filter((_, li) => {
+                        const className = $(li).attr('class') ?? '';
+                        return className.includes('c-dpe__index--active');
+                    })
+                    .first();
+
+                const text = active.clone().children().remove().end().text().trim();
+
+                const rating = this.normalizeEnergyRating(text.charAt(0));
+
+                console.log('🔥 ORPI GES HTML TEXT:', text);
+                console.log('🔥 ORPI GES HTML RATING:', rating);
+
+                if (rating) {
+                    ges = rating;
+                }
+            });
+        }
+
+        /// ============================================================
+        // CENTURY 21 — DPE
+        // ============================================================
+
+        const centuryDpeSvg = $('.c-the-dpe-ges-new-dpe-svg svg').first();
+
+        if (!dpe && centuryDpeSvg.length) {
+            console.log('🔥 CENTURY 21 DPE SVG FOUND');
+
+            const dpeColors: Record<string, string> = {
+                '#00a06d': 'A',
+                '#52b153': 'B',
+                '#a5cc74': 'C',
+                '#f4e70f': 'D',
+                '#f0b40f': 'E',
+                '#eb8235': 'F',
+                '#d7221f': 'G',
+            };
+
+            // --------------------------------------------------------
+            // Valeur numérique
+            // --------------------------------------------------------
+
+            let dpeValue: number | undefined;
+
+            centuryDpeSvg.find('g[data-name="labelsetchiffres"] g[data-name="chiffres"] text').each((_, element) => {
+                const text = $(element).text().trim();
+
+                const value = Number(text.replace(/\s/g, '').replace(',', '.'));
+
+                if (Number.isFinite(value) && dpeValue === undefined) {
+                    dpeValue = value;
+                }
+            });
+
+            // --------------------------------------------------------
+            // Classe DPE
+            // --------------------------------------------------------
+
+            let detectedDpe: string | undefined;
+
+            centuryDpeSvg.find('path').each((_, element) => {
+                if (detectedDpe) {
+                    return;
+                }
+
+                const style = ($(element).attr('style') ?? '').toLowerCase();
+
+                const fillMatch = style.match(/fill\s*:\s*(#[0-9a-f]{6})/i);
+
+                if (!fillMatch) {
+                    return;
+                }
+
+                const color = fillMatch[1].toLowerCase();
+
+                const candidate = dpeColors[color];
+
+                if (!candidate) {
+                    return;
+                }
+
+                /*
+                 * On cherche si ce path coloré possède un contour noir
+                 * correspondant à la classe sélectionnée.
+                 *
+                 * Pour éviter de prendre tous les chemins internes,
+                 * on regarde les paths ayant une géométrie de grande taille.
+                 */
+
+                const d = $(element).attr('d') ?? '';
+
+                if (d.length > 40) {
+                    // Pour l'instant on garde le candidat.
+                    // La validation par géométrie sera faite ci-dessous.
+                }
+            });
+
+            // --------------------------------------------------------
+            // Détection fiable de la classe active
+            // --------------------------------------------------------
+
+            const selectedRanges = [
+                { rating: 'A', minY: 0, maxY: 39 },
+                { rating: 'B', minY: 39, maxY: 68 },
+                { rating: 'C', minY: 68, maxY: 120 },
+                { rating: 'D', minY: 120, maxY: 149 },
+                { rating: 'E', minY: 149, maxY: 178 },
+                { rating: 'F', minY: 178, maxY: 207 },
+                { rating: 'G', minY: 207, maxY: 240 },
+            ];
+
+            /*
+             * Le contour noir de la sélection est un path dont le d
+             * contient la zone de la ligne sélectionnée.
+             */
+
+            centuryDpeSvg.find('path').each((_, element) => {
+                if (detectedDpe) {
+                    return;
+                }
+
+                const style = ($(element).attr('style') ?? '').toLowerCase();
+
+                if (!style.includes('fill:#1d1d1b')) {
+                    return;
+                }
+
+                const d = $(element).attr('d') ?? '';
+
+                /*
+                 * On extrait les coordonnées Y présentes dans le path.
+                 */
+                const yValues = [...d.matchAll(/(?:^|[A-Za-z])[-\d.]+(?:\s+)([-\d.]+)/g)]
+                    .map((match) => Number(match[1]))
+                    .filter(Number.isFinite);
+
+                if (!yValues.length) {
+                    return;
+                }
+
+                const minY = Math.min(...yValues);
+                const maxY = Math.max(...yValues);
+
+                const selected = selectedRanges.find((range) => minY >= range.minY && minY <= range.maxY);
+
+                if (selected) {
+                    detectedDpe = selected.rating;
+
+                    console.log('🔥 CENTURY 21 DPE SELECTED:', detectedDpe, `Y=${minY}-${maxY}`);
+                }
+            });
+
+            if (detectedDpe) {
+                dpe = detectedDpe;
+            }
+
+            console.log('🔥 CENTURY 21 DPE FINAL:', dpe, 'VALUE:', dpeValue);
+        }
+
+        // ============================================================
+        // CENTURY 21 — GES
+        // ============================================================
+
+        const centuryGesSvg = $('.c-the-dpe-ges-new-ges-svg svg').first();
+
+        if (!ges && centuryGesSvg.length) {
+            console.log('🔥 CENTURY 21 GES SVG FOUND');
+
+            interface SvgText {
+                text: string;
+                x: number;
+                y: number;
+            }
+
+            const texts: SvgText[] = [];
+
+            centuryGesSvg.find('text').each((_, element) => {
+                const text = $(element).text().trim();
+
+                const transform = $(element).attr('transform') ?? '';
+
+                const match = transform.match(/translate\(\s*([\d.-]+)[,\s]+([\d.-]+)\s*\)/i);
+
+                if (!match) {
+                    return;
+                }
+
+                const x = Number(match[1]);
+                const y = Number(match[2]);
+
+                if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                    return;
+                }
+
+                texts.push({
+                    text,
+                    x,
+                    y,
+                });
+            });
+
+            console.log('🔥 CENTURY 21 GES SVG TEXTS:', texts);
+
+            /*
+             * On cherche le label :
+             *
+             * kgCO
+             *  2
+             * /m
+             *  2
+             * .an
+             *
+             * puis la valeur placée juste à gauche.
+             */
+
+            const unitText = texts.find((t) => t.text.replace(/\s/g, '').toLowerCase().includes('kgco'));
+
+            console.log('🔥 CENTURY 21 GES UNIT:', unitText);
+
+            let gesValue: number | undefined;
+
+            if (unitText) {
+                const candidates = texts
+                    .map((t) => ({
+                        ...t,
+                        value: Number(t.text.replace(/\s/g, '').replace(',', '.')),
+                    }))
+                    .filter((t) => Number.isFinite(t.value) && t.x < unitText.x && Math.abs(t.y - unitText.y) <= 15)
+                    .sort((a, b) => {
+                        const distanceA = Math.abs(unitText.x - a.x) + Math.abs(unitText.y - a.y);
+
+                        const distanceB = Math.abs(unitText.x - b.x) + Math.abs(unitText.y - b.y);
+
+                        return distanceA - distanceB;
+                    });
+
+                if (candidates.length > 0) {
+                    gesValue = candidates[0].value;
+
+                    console.log(
+                        '🔥 CENTURY 21 GES NUMERIC VALUE:',
+                        gesValue,
+                        `(${candidates[0].x}, ${candidates[0].y})`,
+                    );
+                }
+            }
+
+            console.log('🔥 CENTURY 21 GES VALUE:', gesValue);
+
+            if (gesValue !== undefined) {
+                if (gesValue <= 6) {
+                    ges = 'A';
+                } else if (gesValue <= 10) {
+                    ges = 'B';
+                } else if (gesValue <= 30) {
+                    ges = 'C';
+                } else if (gesValue <= 50) {
+                    ges = 'D';
+                } else if (gesValue <= 70) {
+                    ges = 'E';
+                } else if (gesValue <= 100) {
+                    ges = 'F';
+                } else {
+                    ges = 'G';
+                }
+
+                console.log('🔥 CENTURY 21 GES FINAL:', ges, 'FROM:', gesValue, 'kgCO₂/m²/an');
+            }
+        }
+
+        // ==========================================================
+        // FIGARO IMMOBILIER — DPE / GES
+        // ==========================================================
+
+        if (!dpe) {
+            const activeDpe = $('.classified-dpe__dpe-ges .container-dpe .dpe-list li.active').first();
+
+            if (activeDpe.length) {
+                const classes = activeDpe.attr('class') ?? '';
+
+                const match = classes.match(/\bdpe-([a-g])\b/i);
+
+                if (match) {
+                    dpe = match[1].toUpperCase();
+
+                    console.log('🔥 FIGARO DPE FOUND:', dpe);
+                }
+            }
+        }
+
+        if (!ges) {
+            const activeGes = $('.classified-dpe__dpe-ges .container-ges .ges-list li.active').first();
+
+            if (activeGes.length) {
+                const classes = activeGes.attr('class') ?? '';
+
+                const match = classes.match(/\bges-([a-g])\b/i);
+
+                if (match) {
+                    ges = match[1].toUpperCase();
+
+                    console.log('🔥 FIGARO GES FOUND:', ges);
+                }
+            }
+        }
+
+        // ==========================================================
+        // PARU VENDU — DPE / GES
+        // ==========================================================
+        //
+        // Exemple :
+        //
+        // DPE
+        // <div class="DPE_consEnerNote NoteEnerg_D">D</div>
+        //
+        // GES
+        // <div class="DPE_effSerreNote NoteGES2022_D">D</div>
+        //
+        // IMPORTANT :
+        // On récupère directement la classe énergétique affichée.
+        // ==========================================================
+
+        // ----------------------------------------------------------
+        // PARU VENDU — DPE
+        // ----------------------------------------------------------
+
+        if (!dpe) {
+            const paruVenduDpe = $('.DPE_consEnerNote').first();
+
+            if (paruVenduDpe.length) {
+                const classes = paruVenduDpe.attr('class') ?? '';
+
+                const match = classes.match(/\bNoteEnerg_([A-G])\b/i);
+
+                if (match?.[1]) {
+                    dpe = this.normalizeEnergyRating(match[1]);
+
+                    console.log('🔥 PARU VENDU DPE:', dpe, 'classes:', classes);
+                }
+            }
+        }
+
+        // ----------------------------------------------------------
+        // PARU VENDU — GES
+        // ----------------------------------------------------------
+
+        if (!ges) {
+            const paruVenduGes = $('.DPE_effSerreNote').first();
+
+            if (paruVenduGes.length) {
+                const classes = paruVenduGes.attr('class') ?? '';
+
+                const match = classes.match(/\bNoteGES2022_([A-G])\b/i);
+
+                if (match?.[1]) {
+                    ges = this.normalizeEnergyRating(match[1]);
+
+                    console.log('🔥 PARU VENDU GES:', ges, 'classes:', classes);
+                }
+            }
+        }
+
+        return {
+            dpe,
+            ges,
+        };
+    }
+
+    /**
+     * Normalise et valide une classe énergétique.
+     *
+     * Seules les classes A à G sont acceptées.
+     */
+    private normalizeEnergyRating(value: any): string | undefined {
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+
+        const rating = String(value).trim().toUpperCase();
+
+        return /^[A-G]$/.test(rating) ? rating : undefined;
+    }
+
+    /**
+     * Extrait DPE / GES depuis un objet JSON.
+     *
+     * Recherche récursive avec conservation du chemin complet.
+     *
+     * Exemples supportés :
+     * - fr_energy_after_2021
+     * - fr_ghg_after_2021
+     * - energy
+     * - dpe
+     * - ges
+     * - ghg
+     * - efficiencyclass.rating
+     * - efficiencyClass.rating
+     * - rating
+     */
+    private extractEnergyFromObject(data: any) {
+        let dpe: string | undefined;
+        let ges: string | undefined;
+
+        const visit = (obj: any, path: string[] = []) => {
+            if (obj === null || obj === undefined) {
+                return;
+            }
+
+            if (typeof obj !== 'object') {
+                return;
+            }
+
+            const currentPath = path.join('.').toLowerCase();
+
+            // ==================================================
+            // 1. DÉTECTION DU TYPE
+            // ==================================================
+
+            const type = typeof obj.type === 'string' ? obj.type.toLowerCase() : '';
+
+            const id = typeof obj.id === 'string' ? obj.id.toLowerCase() : '';
+
+            const name = typeof obj.name === 'string' ? obj.name.toLowerCase() : '';
+
+            const semanticPath = `${currentPath}.${type}.${id}.${name}`;
+
+            // ==================================================
+            // 2. RECHERCHE DE RATING
+            // ==================================================
+
+            const possibleRatings = [
+                obj.rating,
+                obj.efficiencyclass?.rating,
+                obj.efficiencyClass?.rating,
+                obj.value,
+                obj.class,
+                obj.energyClass,
+                obj.energy_class,
+                obj.dpe,
+                obj.ges,
+            ];
+
+            for (const value of possibleRatings) {
+                const rating = this.normalizeEnergyRating(value);
+
+                if (!rating) {
+                    continue;
+                }
+
+                // ------------------------------
+                // DPE
+                // ------------------------------
+
+                if (
+                    semanticPath.includes('energy') ||
+                    semanticPath.includes('dpe') ||
+                    semanticPath.includes('efficiency')
+                ) {
+                    if (!dpe) {
+                        dpe = rating;
+
+                        console.log('🔥 DPE TROUVÉ JSON:', {
+                            rating,
+                            path: semanticPath,
+                        });
+                    }
+                }
+
+                // ------------------------------
+                // GES
+                // ------------------------------
+
+                if (
+                    semanticPath.includes('ghg') ||
+                    semanticPath.includes('ges') ||
+                    semanticPath.includes('greenhouse') ||
+                    semanticPath.includes('climate')
+                ) {
+                    if (!ges) {
+                        ges = rating;
+
+                        console.log('🔥 GES TROUVÉ JSON:', {
+                            rating,
+                            path: semanticPath,
+                        });
+                    }
+                }
+            }
+
+            // ==================================================
+            // 3. CLÉS EXPLICITES
+            // ==================================================
+
+            for (const [key, value] of Object.entries(obj)) {
+                const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                // ----------------------------------------------
+                // DPE
+                // ----------------------------------------------
+
+                if (
+                    normalizedKey.includes('frenergyafter2021') ||
+                    normalizedKey === 'dpe' ||
+                    normalizedKey.includes('energyclass') ||
+                    normalizedKey.includes('energyclassification')
+                ) {
+                    const rating = this.extractRatingValue(value);
+
+                    if (rating && !dpe) {
+                        dpe = rating;
+
+                        console.log('🔥 DPE TROUVÉ PAR CLÉ:', {
+                            key,
+                            rating,
+                        });
+                    }
+                }
+
+                // ----------------------------------------------
+                // GES
+                // ----------------------------------------------
+
+                if (
+                    normalizedKey.includes('frghgafter2021') ||
+                    normalizedKey === 'ges' ||
+                    normalizedKey.includes('ghg') ||
+                    normalizedKey.includes('greenhouse')
+                ) {
+                    const rating = this.extractRatingValue(value);
+
+                    if (rating && !ges) {
+                        ges = rating;
+
+                        console.log('🔥 GES TROUVÉ PAR CLÉ:', {
+                            key,
+                            rating,
+                        });
+                    }
+                }
+
+                // ----------------------------------------------
+                // RECURSION
+                // ----------------------------------------------
+
+                if (value !== null && typeof value === 'object') {
+                    visit(value, [...path, key]);
+                }
+            }
+        };
+
+        visit(data);
+
+        return {
+            dpe,
+            ges,
+        };
+    }
+
+    /**
+     * Extrait une classe A-G depuis une structure quelconque.
+     */
+    private extractRatingValue(value: any): string | undefined {
+        if (value === null || value === undefined) {
+            return undefined;
+        }
+
+        // Valeur directe
+        const direct = this.normalizeEnergyRating(value);
+
+        if (direct) {
+            return direct;
+        }
+
+        // Objet
+        if (typeof value === 'object') {
+            const candidates = [
+                value.rating,
+                value.Rating,
+                value.value,
+                value.Value,
+                value.class,
+                value.Class,
+                value.energyClass,
+                value.energy_class,
+                value.label,
+            ];
+
+            for (const candidate of candidates) {
+                const rating = this.normalizeEnergyRating(candidate);
+
+                if (rating) {
+                    return rating;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Fallback DPE / GES depuis le texte.
+     */
+    private extractEnergyRatings(text: string) {
+        const normalized = text
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ');
+
+        let dpe: string | undefined;
+        let ges: string | undefined;
+
+        // ==================================================
+        // 1. DPE EXPLICITE
+        // ==================================================
+
+        const dpePatterns = [
+            /\bdpe\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bclasse\s+(?:energetique|energie)\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bperformance\s+energetique\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bdiagnostic\s+de\s+performance\s+energetique\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bconsommation\s+energetique\s*[:\-]?\s*([a-g])\b/i,
+        ];
+
+        for (const pattern of dpePatterns) {
+            const match = normalized.match(pattern);
+
+            if (match?.[1]) {
+                dpe = this.normalizeEnergyRating(match[1]);
+
+                if (dpe) {
+                    console.log('🔥 DPE TROUVÉ TEXTE:', dpe);
+                    break;
+                }
+            }
+        }
+
+        // ==================================================
+        // 2. GES EXPLICITE
+        // ==================================================
+
+        const gesPatterns = [
+            /\bges\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bclasse\s+climat\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bemissions?\s+(?:de\s+)?gaz\s+a\s+effet\s+de\s+serre\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bemissions?\s+de\s+co2\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bgaz\s+a\s+effet\s+de\s+serre\s*[:\-]?\s*([a-g])\b/i,
+        ];
+
+        for (const pattern of gesPatterns) {
+            const match = normalized.match(pattern);
+
+            if (match?.[1]) {
+                ges = this.normalizeEnergyRating(match[1]);
+
+                if (ges) {
+                    console.log('🔥 GES TROUVÉ TEXTE:', ges);
+                    break;
+                }
+            }
+        }
+
+        // ==================================================
+        // 3. STRUCTURES JSON DANS LE TEXTE
+        // ==================================================
+
+        if (!dpe) {
+            const dpeJsonPatterns = [
+                /fr[_\\]?energy[_\\]?after[_\\]?2021[\s\S]{0,500}?(?:rating|value|class)["']?\s*[:=]\s*["']?([a-g])\b/i,
+
+                /(?:dpe|energyclass|energy_class)[\s\S]{0,300}?(?:rating|value|class)["']?\s*[:=]\s*["']?([a-g])\b/i,
+            ];
+
+            for (const pattern of dpeJsonPatterns) {
+                const match = normalized.match(pattern);
+
+                if (match?.[1]) {
+                    dpe = this.normalizeEnergyRating(match[1]);
+
+                    if (dpe) {
+                        console.log('🔥 DPE TROUVÉ JSON TEXT:', dpe);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!ges) {
+            const gesJsonPatterns = [
+                /fr[_\\]?ghg[_\\]?after[_\\]?2021[\s\S]{0,500}?(?:rating|value|class)["']?\s*[:=]\s*["']?([a-g])\b/i,
+
+                /(?:ges|ghg|greenhouse)[\s\S]{0,300}?(?:rating|value|class)["']?\s*[:=]\s*["']?([a-g])\b/i,
+            ];
+
+            for (const pattern of gesJsonPatterns) {
+                const match = normalized.match(pattern);
+
+                if (match?.[1]) {
+                    ges = this.normalizeEnergyRating(match[1]);
+
+                    if (ges) {
+                        console.log('🔥 GES TROUVÉ JSON TEXT:', ges);
+                        break;
+                    }
+                }
+            }
+        }
+
+        console.log('🔥 FALLBACK ENERGY TEXT');
+        console.log('🔥 DPE:', dpe ?? 'NON TROUVÉ');
+        console.log('🔥 GES:', ges ?? 'NON TROUVÉ');
+
+        return {
+            dpe,
+            ges,
+        };
     }
 }

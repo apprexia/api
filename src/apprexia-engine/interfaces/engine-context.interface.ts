@@ -5,10 +5,10 @@ import { ListingMetadata } from '../../services/meta-data-scrapper/meta-data-scr
 import { CommuneIndicator } from '@prisma/client';
 
 export interface EngineContext {
-  metadata: ListingMetadata;
-  analysis: AnalysisAiResult;
-  dvf: DvfMarketData | null;
-  apprexia: ApprexiaMarketData | null;
-  commune: CommuneIndicator | null;
-  date: Date;
+    metadata: ListingMetadata;
+    analysis: AnalysisAiResult;
+    dvf: DvfMarketData | null;
+    apprexia: ApprexiaMarketData | null;
+    commune: CommuneIndicator | null;
+    date: Date;
 }

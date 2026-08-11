@@ -1,26 +1,28 @@
 export interface ApprexiaMarketData {
-  count: number;
+    count: number;
 
-  confidence: number;
+    confidence: number;
 
-  averageScore: number;
+    averageScore: number;
 
-  averageYield: number;
+    averageYield: number;
 
-  averageNegotiation: number;
+    averageNegotiation: number;
 
-  averageRecommendedPrice: number;
+    averageRecommendedPrice: number;
 
-  averageAskingPrice: number;
+    averageAskingPrice: number;
 
-  averageDiscountPercent: number;
+    averageDiscountPercent: number;
 
-  averageSurfaceDifference: number;
-  strongComparablesCount: number;
+    averageSurfaceDifference: number;
+    strongComparablesCount: number;
 
-  investir: number;
+    investir: number;
 
-  negocier: number;
+    favorable: number;
 
-  eviter: number;
+    negocier: number;
+
+    eviter: number;
 }

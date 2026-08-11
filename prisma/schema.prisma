@@ -64,6 +64,9 @@ model Analysis {
   codePostal String?
   dvfKey     String?
 
+  dpe String?
+  ges String?
+
   codeInsee        String?
   communeContext   Json?
   communeAnalysis  Json?

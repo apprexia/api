@@ -1,6 +1,7 @@
 import { PropertyFeatures } from '../../services/meta-data-scrapper/interfaces/property-features.interface';
 import { MarketPosition } from '../../apprexia-engine/interfaces/market-position.interface';
 import { CommuneAnalysis } from 'src/apprexia-engine/interfaces/commune-analysis.interface';
+import { EnergyScoreResult } from '../../apprexia-engine/engines/energy-engine/types/energy-score.types';
 
 export type Verdict = 'INVESTIR' | 'FAVORABLE' | 'NEGOCIER' | 'EVITER' | 'ERREUR';
 
@@ -25,6 +26,7 @@ export interface EngineBreakdown {
     risk: number;
     yield: number;
     amenities: number;
+    energy: number;
     confidence: number;
     liquidity: number;
 }
@@ -63,6 +65,13 @@ export interface AnalysisAiResult {
     imageUrl: string;
 
     propertyFeatures?: PropertyFeatures;
+
+    // ===============================
+    // Performance energetique
+    // ===============================
+    dpe?: string | null;
+    ges?: string | null;
+    energy?: EnergyScoreResult | null;
 
     // ===============================
     // Amenities
