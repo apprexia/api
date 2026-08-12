@@ -245,46 +245,59 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             console.log('PAGE TITLE:', await page.title());
             console.log('PAGE URL:', page.url());
 
-            await page.waitForTimeout(5000);
+            await page.waitForTimeout(3000);
 
             let html = await page.content();
 
-            const isChallenge =
-                html.includes('Just a moment') ||
-                html.includes('Enable JavaScript and cookies') ||
-                html.includes('captcha-delivery.com') ||
-                html.includes('DataDome') ||
-                html.includes('datadome');
+            console.log('HTML LENGTH:', html.length);
+            console.log('BODY TEXT:', (await page.locator('body').innerText()).substring(0, 2000));
+            await page.screenshot({
+                path: '/tmp/logic-immo-challenge.png',
+                fullPage: true,
+            });
+
+            const isChallenge = this.isAntiBotPage(html);
 
             if (isChallenge) {
-                console.log('⚠️ Challenge anti-bot détecté');
+                this.logger.warn('⚠️ Challenge anti-bot détecté');
+                this.logger.log('⏳ Attente résolution challenge...');
 
-                console.log('⏳ Attente résolution challenge...');
+                // On attend que la page quitte le challenge
+                try {
+                    await page.waitForFunction(
+                        () => {
+                            const title = document.title.toLowerCase();
+                            const body = document.body?.innerText?.toLowerCase() || '';
 
-                await page.waitForTimeout(30000);
+                            return (
+                                !title.includes('just a moment') &&
+                                !body.includes('enable javascript and cookies') &&
+                                !body.includes('datadome') &&
+                                !document.documentElement.innerHTML.toLowerCase().includes('captcha-delivery.com')
+                            );
+                        },
+                        {
+                            timeout: 30000,
+                        },
+                    );
+                } catch {
+                    this.logger.warn('⚠️ Challenge toujours présent après 30 secondes');
+                }
 
-                console.log('URL après challenge:', page.url());
-                console.log('TITLE après challenge:', await page.title());
+                await page.waitForTimeout(2000);
 
                 html = await page.content();
             }
 
-            // 🔎 Vérification APRÈS l'attente
             const finalTitle = await page.title();
+            const finalUrl = page.url();
 
-            console.log('FINAL TITLE:', finalTitle);
-            console.log('FINAL URL:', page.url());
+            this.logger.log(`FINAL TITLE: ${finalTitle}`);
+            this.logger.log(`FINAL URL: ${finalUrl}`);
 
-            const finalHtml = html.toLowerCase();
-
-            if (
-                finalHtml.includes('captcha-delivery.com') ||
-                finalHtml.includes('datadome') ||
-                finalHtml.includes('just a moment') ||
-                finalHtml.includes('enable javascript and cookies')
-            ) {
+            if (this.isAntiBotPage(html)) {
                 await page.screenshot({
-                    path: 'logic-immo-debug.png',
+                    path: '/tmp/antibot-debug.png',
                     fullPage: true,
                 });
 
@@ -292,7 +305,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             }
 
             await page.screenshot({
-                path: 'logic-immo-debug.png',
+                path: '/tmp/scrape-debug.png',
                 fullPage: true,
             });
 
@@ -303,6 +316,17 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         } finally {
             await context.close();
         }
+    }
+
+    private isAntiBotPage(html: string): boolean {
+        const content = html.toLowerCase();
+
+        return (
+            content.includes('captcha-delivery.com') ||
+            content.includes('datadome') ||
+            content.includes('just a moment') ||
+            content.includes('enable javascript and cookies')
+        );
     }
 
     private async extractMetadata(html: string, url: string): Promise<Omit<ListingMetadata, 'source'>> {
@@ -629,7 +653,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             this.logger.log('🚀 Launch Chromium');
 
             this.browser = await chromium.launch({
-                headless: true,
+                headless: false,
                 args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
             });
         }
