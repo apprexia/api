@@ -92,18 +92,66 @@ interface ListingSchema {
 export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(MetadataScraperService.name);
 
-    private normalizeUrl(url: string): string {
+    private cleanUrl(rawUrl: string): string {
+        if (!rawUrl) {
+            return rawUrl;
+        }
+
+        // Cherche le début réel de l'URL
+        const httpsIndex = rawUrl.indexOf('https://');
+
+        if (httpsIndex === -1) {
+            return rawUrl.trim();
+        }
+
+        let url = rawUrl.substring(httpsIndex).trim();
+
+        // Supprime un éventuel texte parasite après l'URL
+        const spaceIndex = url.search(/\s/);
+
+        if (spaceIndex !== -1) {
+            url = url.substring(0, spaceIndex);
+        }
+
+        // Nettoyage de caractères ajoutés autour de l'URL
+        url = url.replace(/[)\]}>,]+$/, '');
+
+        return url;
+    }
+
+    private normalizeUrl(rawUrl: string): string {
+        const url = this.cleanUrl(rawUrl);
+
         try {
             const parsedUrl = new URL(url);
 
-            if (parsedUrl.hostname.includes('seloger.com')) {
+            const hostname = parsedUrl.hostname.toLowerCase();
+            const pathname = parsedUrl.pathname.toLowerCase();
+
+            // SELOGER
+            if (hostname.includes('seloger.com')) {
+                if (pathname.includes('/wl-cdp/')) {
+                    return url;
+                }
+
                 return `${parsedUrl.origin}${parsedUrl.pathname}?utm_medium=desktop-web&utm_source=seloger&utm_campaign=on-site_message-sharing&utm_content=cdp&utm_term=sharing`;
             }
 
-            if (parsedUrl.hostname.includes('logic-immo.com')) {
+            // LOGIC-IMMO
+            if (hostname.includes('logic-immo.com')) {
+                if (/\/detail-vente-\d+\.htm/i.test(pathname) || pathname.includes('/detail-annonce/')) {
+                    return url;
+                }
+
                 return `${parsedUrl.origin}${parsedUrl.pathname}?utm_medium=desktop-web&utm_source=logicimmo&utm_campaign=on-site_message-sharing&utm_content=cdp&utm_term=sharing`;
             }
 
+            // LE BON COIN
+            if (hostname.includes('leboncoin.fr')) {
+                return url;
+            }
+
+            // Autres sites
             return url;
         } catch {
             return url;
@@ -581,8 +629,8 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             this.logger.log('🚀 Launch Chromium');
 
             this.browser = await chromium.launch({
-                headless: false,
-                args: ['--disable-blink-features=AutomationControlled'],
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
             });
         }
 
