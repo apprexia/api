@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import puppeteer from 'puppeteer';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
+import axios from 'axios';
 
 @Injectable()
 export class ReportService {
@@ -14,1046 +15,1008 @@ export class ReportService {
             month: 'long',
             year: 'numeric',
         }).format(new Date());
+        const propertyImage = await this.getPropertyImage(data.imageUrl);
+
         const html = `
 
 <style>
-
-/* =========================================================
+    /* =========================================================
    A4 — FULL BLEED DARK
 ========================================================= */
 
-@page {
-    size: A4;
-    margin: 0;
-}
+    @page {
+        size: A4;
+        margin: 0;
+    }
 
-* {
-    box-sizing: border-box;
-}
+    * {
+        box-sizing: border-box;
+    }
 
-html,
-body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    min-height: 100%;
-}
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+    }
 
-body {
-    font-family: 'DM Sans', Arial, sans-serif;
+    body {
+        font-family: 'DM Sans', Arial, sans-serif;
 
-    background: #0a0e1a;
-    color: #f8fafc;
+        background: #0a0e1a;
+        color: #f8fafc;
 
-    font-size: 13px;
-    line-height: 1.5;
+        font-size: 15px;
+        line-height: 1.5;
 
-    -webkit-font-smoothing: antialiased;
+        -webkit-font-smoothing: antialiased;
 
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-}
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    DESIGN TOKENS
 ========================================================= */
 
-:root {
-    --bg: #171d3f;
+    :root {
+        --bg: #171d3f;
 
-    --surface: rgba(255, 255, 255, 0.045);
-    --surface-2: rgba(255, 255, 255, 0.07);
+        --surface: rgba(255, 255, 255, 0.045);
+        --surface-2: rgba(255, 255, 255, 0.07);
 
-    --border: rgba(255, 255, 255, 0.10);
-    --border-soft: rgba(255, 255, 255, 0.065);
+        --border: rgba(255, 255, 255, 0.10);
+        --border-soft: rgba(255, 255, 255, 0.065);
 
-    --text: #f8fafc;
-    --text-soft: #c2c8da;
-    --text-muted: #858eaa;
+        --text: #f8fafc;
+        --text-soft: #c2c8da;
+        --text-muted: #858eaa;
 
-    --accent: #a5b4fc;
-    --accent-strong: #818cf8;
+        --accent: #a5b4fc;
+        --accent-strong: #818cf8;
 
-    --pink: #ec4899;
+        --pink: #ec4899;
 
-    --green: #86efac;
-    --orange: #fbbf24;
-}
+        --green: #86efac;
+        --orange: #fbbf24;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    PAGE
 ========================================================= */
 
-.page {
-    position: relative;
+    .page {
+        position: relative;
 
-    width: 100%;
-    min-height: 297mm;
+        width: 100%;
+        min-height: 297mm;
 
-    padding: 14mm 17mm 11mm;
+        padding: 14mm 17mm 11mm;
 
-    overflow: hidden;
+        overflow: hidden;
 
-    background:
-        radial-gradient(
-            circle at 92% 4%,
-            rgba(129, 140, 248, 0.12),
-            transparent 25%
-        ),
-        radial-gradient(
-            circle at 5% 48%,
-            rgba(236, 72, 153, 0.045),
-            transparent 22%
-        ),
-        #171d3f;
-}
+        background: radial-gradient(circle at 92% 4%, rgba(129, 140, 248, 0.12), transparent 25%), radial-gradient(circle at 5% 48%, rgba(236, 72, 153, 0.045), transparent 22%), #121932
+    }
 
 
-/* =========================================================
+    /* =========================================================
    HEADER
 ========================================================= */
 
-.header {
-    display: flex;
+    .header {
+        display: flex;
 
-    justify-content: space-between;
-    align-items: flex-start;
+        justify-content: space-between;
+        align-items: flex-start;
 
-    padding-bottom: 13px;
+        padding-bottom: 13px;
 
-    border-bottom: 1px solid var(--border);
-}
+        border-bottom: 1px solid var(--border);
+    }
 
-.brand-wrapper {
-    display: flex;
-    flex-direction: column;
-}
+    .brand-wrapper {
+        display: flex;
+        flex-direction: column;
+    }
 
-.brand {
-    font-size: 30px;
+    .brand {
+        font-size: 24px;
+        line-height: 1;
+        font-weight: 600;
+        letter-spacing: 3.6px;
+        color: var(--accent);
+        font-family: "Inconsolata", monospace;
+    }
 
-    line-height: 1;
+    .brand span {
+        color: #ec4899;
+    }
 
-    font-weight: 800;
+    .subtitle {
+        margin-top: 5px;
 
-    letter-spacing: -1.4px;
+        color: var(--text-soft);
 
-    background: linear-gradient(
-        135deg,
-        #ffffff 0%,
-        #c7d2fe 55%,
-        #ec4899 100%
-    );
+        font-size: 11px;
+    }
 
-    -webkit-background-clip: text;
-    background-clip: text;
+    .generated {
+        margin-top: 3px;
 
-    color: transparent;
-}
+        color: var(--text-muted);
 
-.brand span {
-    color: #ec4899;
-}
+        font-size: 9px;
+    }
 
-.subtitle {
-    margin-top: 5px;
-
-    color: var(--text-soft);
-
-    font-size: 11px;
-}
-
-.generated {
-    margin-top: 3px;
-
-    color: var(--text-muted);
-
-    font-size: 9px;
-}
-
-.logo {
-    width: 78px;
-    height: auto;
-}
+    .logo {
+        width: 78px;
+        height: auto;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    REPORT TAG
 ========================================================= */
 
-.report-tag {
-    display: inline-flex;
+    .report-tag {
+        display: inline-flex;
 
-    align-items: center;
+        align-items: center;
 
-    margin-top: 13px;
+        margin-top: 13px;
 
-    padding: 5px 9px;
+        padding: 5px 9px;
 
-    border: 1px solid var(--border);
+        border: 1px solid var(--border);
 
-    border-radius: 20px;
+        border-radius: 20px;
 
-    background: rgba(255,255,255,.035);
+        background: rgba(255, 255, 255, .035);
 
-    color: var(--text-muted);
+        color: var(--text-muted);
 
-    font-size: 9px;
+        font-size: 9px;
 
-    text-transform: uppercase;
+        text-transform: uppercase;
 
-    letter-spacing: 1px;
-}
+        letter-spacing: 1px;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    PROPERTY HERO
 ========================================================= */
 
-.property-hero {
-    position: relative;
+    .property-hero {
+        position: relative;
 
-    display: grid;
+        display: grid;
 
-    grid-template-columns: 44% 56%;
+        grid-template-columns: 44% 56%;
 
-    min-height: 164px;
+        height: 154px;
 
-    margin-top: 13px;
+        margin-top: 13px;
 
-    overflow: hidden;
+        overflow: hidden;
 
-    border: 1px solid var(--border);
+        border: 1px solid var(--border);
 
-    border-radius: 10px;
+        border-radius: 10px;
 
-    background: rgba(255,255,255,.035);
-}
+        background: rgba(255, 255, 255, .035);
+    }
 
-.property-image-wrapper {
-    position: relative;
+    .property-image-wrapper {
+        position: relative;
 
-    min-height: 164px;
+        min-height: 154px;
 
-    overflow: hidden;
-}
+        overflow: hidden;
+    }
 
-.property-image-wrapper::after {
-    content: "";
+    .property-image-wrapper::after {
+        content: "";
 
-    position: absolute;
+        position: absolute;
 
-    inset: 0;
+        inset: 0;
 
-    background:
-        linear-gradient(
-            90deg,
-            transparent 55%,
-            rgba(23,29,63,.35) 100%
-        );
-}
+        background:
+            linear-gradient(90deg,
+                transparent 55%,
+                rgba(23, 29, 63, .35) 100%);
+    }
 
-.property-image {
-    width: 100%;
-    height: 100%;
+    .property-image {
+        width: 100%;
+        height: 100%;
 
-    object-fit: cover;
-}
+        object-fit: cover;
+    }
 
-.property-info {
-    position: relative;
+    .property-info {
+        position: relative;
 
-    display: flex;
+        display: flex;
 
-    flex-direction: column;
+        flex-direction: column;
 
-    justify-content: center;
+        justify-content: center;
 
-    padding: 20px 24px;
-}
+        padding: 0px 24px;
+    }
 
-.property-kicker {
-    margin-bottom: 6px;
+    .property-kicker {
+        margin-bottom: 6px;
 
-    color: var(--accent);
+        color: var(--accent);
 
-    font-size: 9px;
+        font-size: 9px;
 
-    font-weight: 700;
+        font-weight: 700;
 
-    text-transform: uppercase;
+        text-transform: uppercase;
 
-    letter-spacing: 1.5px;
-}
+        letter-spacing: 1.5px;
+    }
 
-.property-title {
-    margin: 0;
+    .property-title {
+        margin: 0;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 22px;
+        font-size: 18px;
 
-    line-height: 1.15;
+        line-height: 1.15;
 
-    font-weight: 750;
+        font-weight: 750;
 
-    letter-spacing: -.5px;
-}
+        letter-spacing: -.5px;
+    }
 
-.property-location {
-    margin-top: 6px;
+    .property-location {
+        margin-top: 6px;
 
-    color: var(--text-soft);
+        color: var(--text-soft);
 
-    font-size: 11px;
-}
+        font-size: 11px;
+    }
 
-.property-meta {
-    display: flex;
+    .property-meta {
+        display: flex;
 
-    gap: 20px;
+        gap: 20px;
 
-    margin-top: 16px;
+        margin-top: 16px;
 
-    padding-top: 12px;
+        padding-top: 12px;
 
-    border-top: 1px solid var(--border-soft);
-}
+        border-top: 1px solid var(--border-soft);
+    }
 
-.meta-item {
-    display: flex;
+    .meta-item {
+        display: flex;
 
-    flex-direction: column;
-}
+        flex-direction: column;
+    }
 
-.meta-label {
-    color: var(--text-muted);
+    .meta-label {
+        color: var(--text-muted);
 
-    font-size: 8.5px;
+        font-size: 9.5px;
 
-    font-weight: 600;
+        font-weight: 600;
 
-    text-transform: uppercase;
+        text-transform: uppercase;
 
-    letter-spacing: 1px;
-}
+        letter-spacing: 1px;
+    }
 
-.meta-value {
-    margin-top: 3px;
+    .meta-value {
+        margin-top: 3px;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 12px;
+        font-size: 12px;
 
-    font-weight: 700;
-}
+        font-weight: 700;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    SECTION
 ========================================================= */
 
-.section {
-    margin-top: 15px;
+    .section {
+        margin-top: 15px;
 
-    break-inside: avoid;
-    page-break-inside: avoid;
-}
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
 
-.section-heading {
-    display: flex;
+    .section-heading {
+        display: flex;
 
-    align-items: center;
+        align-items: center;
 
-    gap: 8px;
+        gap: 8px;
 
-    margin-bottom: 8px;
-}
+        margin-bottom: 8px;
+    }
 
-.section-number {
-    display: flex;
+    .section-number {
+        display: flex;
 
-    align-items: center;
-    justify-content: center;
+        align-items: center;
+        justify-content: center;
 
-    width: 18px;
-    height: 18px;
+        width: 18px;
+        height: 18px;
 
-    border-radius: 5px;
+        border-radius: 5px;
 
-    background: rgba(129,140,248,.14);
+        background: rgba(129, 140, 248, .14);
 
-    color: var(--accent);
+        color: var(--pink);
 
-    font-size: 9px;
+        font-size: 9px;
 
-    font-weight: 700;
-}
+        font-weight: 700;
+    }
 
-.section-title {
-    margin: 0;
+    .section-title {
+        margin: 0;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 10px;
+        font-size: 12px;
 
-    font-weight: 700;
+        font-weight: 700;
 
-    text-transform: uppercase;
+        text-transform: uppercase;
 
-    letter-spacing: 1.3px;
-}
+        letter-spacing: 1.3px;
+    }
 
-.section-line {
-    flex: 1;
+    .section-line {
+        flex: 1;
 
-    height: 1px;
+        height: 1px;
 
-    background: var(--border-soft);
-}
+        background: var(--border-soft);
+    }
 
 
-/* =========================================================
+    /* =========================================================
    SUMMARY
 ========================================================= */
 
-.summary {
-    position: relative;
+    .summary {
+        overflow: hidden;
+        position: relative;
 
-    padding: 12px 16px;
+        padding: 12px 16px;
 
-    border: 1px solid var(--border);
+        border: 1px solid var(--border);
 
-    border-radius: 8px;
+        border-radius: 8px;
 
-    background:
-        linear-gradient(
-            110deg,
-            rgba(129,140,248,.08),
-            rgba(255,255,255,.025)
-        );
-}
+        background:
+            linear-gradient(110deg,
+                rgba(129, 140, 248, .08),
+                rgba(255, 255, 255, .025));
+    }
 
-.summary::before {
-    content: "";
+    .summary::before {
+        content: "";
 
-    position: absolute;
+        position: absolute;
 
-    left: 0;
-    top: 9px;
-    bottom: 9px;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
 
-    width: 2px;
+        background: linear-gradient(180deg,
+                #818cf8,
+                #ec4899);
 
-    background: linear-gradient(
-        180deg,
-        #818cf8,
-        #ec4899
-    );
+        border-radius: 3px;
+    }
 
-    border-radius: 3px;
-}
+    .summary-text {
+        margin: 0;
+        padding-left: 4px;
+        font-family: "Inconsolata", monospace;
+        color: var(--text-soft);
 
-.summary-text {
-    margin: 0;
+        font-size: 10px;
 
-    padding-left: 4px;
+        line-height: 1.55;
+    }
 
-    color: var(--text-soft);
-
-    font-size: 11.5px;
-
-    line-height: 1.55;
-}
-
-.summary strong {
-    color: var(--text);
-}
+    .summary strong {
+        color: var(--text);
+    }
 
 
-/* =========================================================
+    /* =========================================================
    KEY METRICS
 ========================================================= */
 
-.decision {
-    display: grid;
+    .decision {
+        display: grid;
 
-    grid-template-columns:
-        1fr
-        1fr
-        1fr
-        1fr;
+        grid-template-columns:
+            1fr 1fr 1fr 1fr;
 
-    overflow: hidden;
+        overflow: hidden;
 
-    border: 1px solid var(--border);
+        border: 1px solid var(--border);
 
-    border-radius: 9px;
+        border-radius: 9px;
 
-    background: rgba(255,255,255,.025);
-}
+        background: rgba(255, 255, 255, .025);
+    }
 
-.decision-item {
-    position: relative;
+    .decision-item {
+        position: relative;
 
-    padding: 12px 14px;
+        padding: 12px 14px;
 
-    border-right: 1px solid var(--border-soft);
-}
+        border-right: 1px solid var(--border-soft);
+    }
 
-.decision-item:last-child {
-    border-right: none;
-}
+    .decision-item:last-child {
+        border-right: none;
+    }
 
-.decision-item:first-child::before {
-    content: "";
+    .decision-item:first-child::before {
+        content: "";
 
-    position: absolute;
+        position: absolute;
 
-    left: 0;
-    top: 0;
-    bottom: 0;
+        left: 0;
+        top: 0;
+        bottom: 0;
 
-    width: 2px;
+        width: 3px;
 
-    background: linear-gradient(
-        180deg,
-        #818cf8,
-        #ec4899
-    );
-}
+        background: linear-gradient(180deg,
+                #818cf8,
+                #ec4899);
+    }
 
-.decision-label {
-    color: var(--text-muted);
+    .decision-label {
+        color: var(--text-muted);
 
-    font-size: 8.5px;
+        font-size: 8.5px;
 
-    font-weight: 600;
+        font-weight: 600;
 
-    text-transform: uppercase;
+        text-transform: uppercase;
 
-    letter-spacing: 1px;
-}
+        letter-spacing: 1px;
+    }
 
-.decision-value {
-    margin-top: 5px;
+    .decision-value {
+        margin-top: 5px;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 17px;
+        font-size: 17px;
 
-    line-height: 1;
+        line-height: 1;
 
-    font-weight: 800;
+        font-weight: 800;
 
-    letter-spacing: -.3px;
-}
+        letter-spacing: -.3px;
+    }
 
-.decision-value.accent {
-    color: var(--accent);
-}
+    .decision-value.accent {
+        color: var(--accent);
+    }
 
-.decision-value.verdict {
-    font-size: 13px;
+    .decision-value.verdict {
+        font-size: 13px;
 
-    letter-spacing: .2px;
-}
+        letter-spacing: .2px;
+    }
 
-.decision-sub {
-    margin-top: 4px;
+    .decision-sub {
+        margin-top: 4px;
 
-    color: var(--text-muted);
+        color: var(--text-muted);
 
-    font-size: 9px;
-}
+        font-size: 9px;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    TWO COLUMNS
 ========================================================= */
 
-.two-columns {
-    display: grid;
+    .two-columns {
+        display: grid;
 
-    grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 1fr;
 
-    gap: 34px;
-}
+        gap: 34px;
+    }
 
-.column {
-    min-width: 0;
-}
+    .column {
+        min-width: 0;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    DATA TABLE
 ========================================================= */
 
-.data-table {
-    width: 100%;
+    .data-table {
+        width: 100%;
 
-    border-collapse: collapse;
-}
+        border-collapse: collapse;
+    }
 
-.data-table tr {
-    border-bottom: 1px solid var(--border-soft);
-}
+    .data-table tr {
+        border-bottom: 1px solid var(--border-soft);
+    }
 
-.data-table tr:last-child {
-    border-bottom: none;
-}
+    .data-table tr:last-child {
+        border-bottom: none;
+    }
 
-.data-table td {
-    padding: 6px 2px;
-}
+    .data-table td {
+        padding: 6px 2px;
+        font-size: 12px;
+    }
 
-.data-label {
-    color: var(--text-muted);
+    .data-label {
+        color: var(--text-muted);
 
-    font-size: 10.5px;
-}
+        font-size: 10.5px;
+    }
 
-.data-value {
-    text-align: right;
+    .data-value {
+        text-align: right;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 10.5px;
+        font-size: 10.5px;
 
-    font-weight: 700;
-}
+        font-weight: 700;
+    }
 
-.data-value.accent {
-    color: var(--accent);
-}
+    .data-value.accent {
+        color: var(--accent);
+    }
 
 
-/* =========================================================
+    /* =========================================================
    SCORE
 ========================================================= */
 
-.score-panel {
-    display: flex;
+    .score-panel {
+        display: flex;
 
-    align-items: center;
+        align-items: center;
 
-    gap: 16px;
+        gap: 16px;
 
-    padding: 12px 14px;
+        padding: 12px 14px;
 
-    border: 1px solid var(--border);
+        border: 1px solid var(--border);
 
-    border-radius: 8px;
+        border-radius: 8px;
 
-    background: var(--surface);
-}
+        background: var(--surface);
+    }
 
-.score-ring {
-    display: flex;
+    .score-ring {
+        display: flex;
 
-    align-items: center;
-    justify-content: center;
+        align-items: center;
+        justify-content: center;
 
-    width: 62px;
-    height: 62px;
+        width: 62px;
+        height: 62px;
 
-    flex-shrink: 0;
+        flex-shrink: 0;
 
-    border-radius: 50%;
+        border-radius: 50%;
 
-    background:
-        radial-gradient(
-            circle at center,
+        background: radial-gradient(circle at center,
             #171d3f 62%,
-            transparent 63%
-        ),
-        conic-gradient(
-            #818cf8 0deg,
-            #a5b4fc ${data.score * 3.6}deg,
-            rgba(255,255,255,.08) ${data.score * 3.6}deg,
-            rgba(255,255,255,.08) 360deg
-        );
-}
+            transparent 63%),
+        conic-gradient(#818cf8 0deg,
+            #a5b4fc $ {
+                data.score * 3.6
+            }
 
-.score-ring-value {
-    font-size: 17px;
+            deg,
+            rgba(255, 255, 255, .08) $ {
+                data.score * 3.6
+            }
 
-    font-weight: 800;
+            deg,
+            rgba(255, 255, 255, .08) 360deg);
+    }
 
-    color: var(--text);
-}
+    .score-ring-value {
+        font-size: 17px;
 
-.score-ring-value span {
-    font-size: 9px;
+        font-weight: 800;
 
-    color: var(--text-muted);
-}
+        color: var(--text);
+    }
 
-.score-description {
-    color: var(--text-soft);
+    .score-ring-value span {
+        font-size: 9px;
 
-    font-size: 10.5px;
+        color: var(--text-muted);
+    }
 
-    line-height: 1.5;
-}
+    .score-description {
+        color: var(--text-soft);
+
+        font-size: 9px;
+        font-family: "Inconsolata", monospace;
+        line-height: 1.5;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    VERDICT
 ========================================================= */
 
-.verdict-panel {
-    position: relative;
+    .verdict-panel {
+        position: relative;
 
-    padding: 12px 15px;
+        padding: 12px 15px;
 
-    overflow: hidden;
+        overflow: hidden;
 
-    border: 1px solid var(--border);
+        border: 1px solid var(--border);
 
-    border-radius: 8px;
+        border-radius: 8px;
 
-    background:
-        linear-gradient(
-            120deg,
-            rgba(129,140,248,.10),
-            rgba(236,72,153,.045)
-        );
-}
+        background:
+            linear-gradient(120deg,
+                rgba(129, 140, 248, .10),
+                rgba(236, 72, 153, .045));
+    }
 
-.verdict-panel::after {
-    content: "";
+    .verdict-panel::after {
+        content: "";
 
-    position: absolute;
+        position: absolute;
 
-    width: 100px;
-    height: 100px;
+        width: 100px;
+        height: 100px;
 
-    right: -45px;
-    top: -55px;
+        right: -45px;
+        top: -55px;
 
-    border-radius: 50%;
+        border-radius: 50%;
 
-    background: rgba(129,140,248,.08);
-}
+        background: rgba(129, 140, 248, .08);
+    }
 
-.verdict-label {
-    color: var(--text-muted);
+    .verdict-label {
+        color: var(--text-muted);
 
-    font-size: 8.5px;
+        font-size: 8.5px;
 
-    text-transform: uppercase;
+        text-transform: uppercase;
 
-    letter-spacing: 1px;
-}
+        letter-spacing: 1px;
+    }
 
-.verdict-value {
-    margin-top: 3px;
+    .verdict-value {
+        margin-top: 3px;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 21px;
+        font-size: 21px;
 
-    line-height: 1.1;
+        line-height: 1.1;
 
-    font-weight: 800;
-}
+        font-weight: 800;
+    }
 
-.verdict-description {
-    margin: 5px 0 0;
+    .verdict-description {
+        margin: 5px 0 0;
+        font-family: "Inconsolata", monospace;
+        color: var(--text-soft);
 
-    color: var(--text-soft);
+        font-size: 9px;
 
-    font-size: 10.5px;
-
-    line-height: 1.45;
-}
+        line-height: 1.45;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    ESTIMATE
 ========================================================= */
 
-.estimate {
-    padding: 13px 16px;
+    .estimate {
+        padding: 13px 16px;
 
-    border: 1px solid var(--border);
+        border: 1px solid var(--border);
 
-    border-radius: 8px;
+        border-radius: 8px;
 
-    background: var(--surface);
-}
+        background: var(--surface);
+    }
 
-.estimate-main {
-    display: flex;
+    .estimate-main {
+        display: flex;
 
-    justify-content: space-between;
+        justify-content: space-between;
 
-    align-items: flex-end;
-}
+        align-items: flex-end;
+    }
 
-.estimate-value {
-    margin-top: 3px;
+    .estimate-value {
+        margin-top: 3px;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 25px;
+        font-size: 25px;
 
-    line-height: 1;
+        line-height: 1;
 
-    font-weight: 800;
-}
+        font-weight: 800;
+    }
 
-.estimate-range {
-    color: var(--text-soft);
+    .estimate-range {
+        color: var(--text-soft);
 
-    font-size: 10px;
-}
+        font-size: 10px;
+    }
 
-.range {
-    position: relative;
+    .range {
+        position: relative;
 
-    height: 5px;
+        height: 5px;
 
-    margin: 13px 0 8px;
+        margin: 13px 0 8px;
 
-    overflow: hidden;
+        overflow: hidden;
 
-    border-radius: 20px;
+        border-radius: 20px;
 
-    background: rgba(255,255,255,.08);
-}
+        background: rgba(255, 255, 255, .08);
+    }
 
-.range-fill {
-    position: absolute;
+    .range-fill {
+        position: absolute;
 
-    left: 18%;
-    right: 18%;
+        left: 18%;
+        right: 18%;
 
-    height: 100%;
+        height: 100%;
 
-    border-radius: 20px;
+        border-radius: 20px;
 
-    background: linear-gradient(
-        90deg,
-        #6366f1,
-        #a5b4fc,
-        #ec4899
-    );
-}
+        background: linear-gradient(90deg,
+                #6366f1,
+                #a5b4fc,
+                #ec4899);
+    }
 
-.estimate-description {
-    margin: 0;
+    .estimate-description {
+        margin: 0;
 
-    color: var(--text-muted);
+        color: var(--text-muted);
 
-    font-size: 9.5px;
-}
+        font-size: 9.5px;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    LISTS
 ========================================================= */
 
-.clean-list {
-    margin: 0;
+    .clean-list {
+        margin: 0;
 
-    padding: 0;
+        padding: 0;
 
-    list-style: none;
-}
+        list-style: none;
+    }
 
-.clean-list li {
-    display: flex;
+    .clean-list li {
+        display: flex;
 
-    align-items: flex-start;
+        align-items: flex-start;
 
-    gap: 7px;
+        gap: 7px;
 
-    padding: 5px 0;
+        padding: 5px 0;
 
-    border-bottom: 1px solid var(--border-soft);
+        border-bottom: 1px solid var(--border-soft);
 
-    color: var(--text-soft);
+        color: var(--text-soft);
 
-    font-size: 10.5px;
+        font-size: 10.5px;
 
-    line-height: 1.45;
-}
+        line-height: 1.45;
+    }
 
-.clean-list li:last-child {
-    border-bottom: none;
-}
+    .clean-list li:last-child {
+        border-bottom: none;
+    }
 
-.check {
-    display: inline-flex;
+    .check {
+        display: inline-flex;
 
-    align-items: center;
-    justify-content: center;
+        align-items: center;
+        justify-content: center;
 
-    width: 16px;
-    height: 16px;
+        width: 16px;
+        height: 16px;
 
-    flex-shrink: 0;
+        flex-shrink: 0;
 
-    border-radius: 50%;
+        border-radius: 50%;
 
-    background: rgba(134,239,172,.10);
+        background: rgba(134, 239, 172, .10);
 
-    color: var(--green);
+        color: var(--green);
 
-    font-size: 9px;
+        font-size: 9px;
 
-    font-weight: 800;
-}
+        font-weight: 800;
+    }
 
-.warning {
-    display: inline-flex;
+    .warning {
+        display: inline-flex;
 
-    align-items: center;
-    justify-content: center;
+        align-items: center;
+        justify-content: center;
 
-    width: 16px;
-    height: 16px;
+        width: 16px;
+        height: 16px;
 
-    flex-shrink: 0;
+        flex-shrink: 0;
 
-    border-radius: 50%;
+        border-radius: 50%;
 
-    background: rgba(251,191,36,.10);
+        background: rgba(251, 191, 36, .10);
 
-    color: var(--orange);
+        color: var(--orange);
 
-    font-size: 9px;
+        font-size: 9px;
 
-    font-weight: 800;
-}
+        font-weight: 800;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    CONCLUSION
 ========================================================= */
 
-.conclusion {
-    position: relative;
+    .conclusion {
+        position: relative;
 
-    margin-top: 15px;
+        margin-top: 15px;
 
-    padding: 14px 17px;
+        padding: 14px 17px;
 
-    overflow: hidden;
+        overflow: hidden;
 
-    border: 1px solid rgba(165,180,252,.18);
+        border: 1px solid rgba(165, 180, 252, .18);
 
-    border-radius: 9px;
+        border-radius: 9px;
 
-    background:
-        linear-gradient(
-            115deg,
-            rgba(99,102,241,.13),
-            rgba(236,72,153,.055)
-        );
-}
+        background:
+            linear-gradient(115deg,
+                rgba(99, 102, 241, .13),
+                rgba(236, 72, 153, .055));
+    }
 
-.conclusion::before {
-    content: "";
+    .conclusion::before {
+        content: "";
 
-    position: absolute;
+        position: absolute;
 
-    top: -55px;
-    right: -35px;
+        top: -55px;
+        right: -35px;
 
-    width: 140px;
-    height: 140px;
+        width: 140px;
+        height: 140px;
 
-    border-radius: 50%;
+        border-radius: 50%;
 
-    background: rgba(165,180,252,.08);
-}
+        background: rgba(165, 180, 252, .08);
+    }
 
-.conclusion-title {
-    position: relative;
+    .conclusion-title {
+        position: relative;
 
-    margin: 0 0 6px;
+        margin: 0 0 6px;
 
-    color: var(--text);
+        color: var(--text);
 
-    font-size: 13px;
+        font-size: 13px;
 
-    font-weight: 750;
-}
+        font-weight: 750;
+    }
 
-.conclusion p {
-    position: relative;
+    .conclusion p {
+        position: relative;
+        font-family: "Inconsolata", monospace;
+        margin: 5px 0;
 
-    margin: 5px 0;
+        color: var(--text-soft);
 
-    color: var(--text-soft);
+        font-size: 10.5px;
 
-    font-size: 10.5px;
+        line-height: 1.5;
+    }
 
-    line-height: 1.5;
-}
-
-.conclusion strong {
-    color: var(--text);
-}
+    .conclusion strong {
+        color: var(--text);
+    }
 
 
-/* =========================================================
+    /* =========================================================
    METHODOLOGY
 ========================================================= */
 
-.methodology {
-    margin-top: 12px;
+    .methodology {
+        margin-top: 12px;
 
-    padding-top: 9px;
+        padding-top: 9px;
 
-    border-top: 1px solid var(--border);
+        border-top: 1px solid var(--border);
 
-    color: var(--text-muted);
+        color: var(--text-muted);
 
-    font-size: 9px;
+        font-size: 9px;
 
-    line-height: 1.45;
-}
+        line-height: 1.45;
+    }
 
-.methodology strong {
-    color: var(--text-soft);
-}
+    .methodology strong {
+        color: var(--text-soft);
+    }
 
 
-/* =========================================================
+    /* =========================================================
    FOOTER
 ========================================================= */
 
-.footer {
-    display: flex;
+    .footer {
+        display: flex;
 
-    justify-content: space-between;
+        justify-content: space-between;
 
-    margin-top: 9px;
+        margin-top: 9px;
 
-    padding-top: 7px;
+        padding-top: 7px;
 
-    border-top: 1px solid var(--border);
+        border-top: 1px solid var(--border);
 
-    color: var(--text-muted);
+        color: var(--text-muted);
 
-    font-size: 9px;
-}
+        font-size: 9px;
+    }
 
 
-/* =========================================================
+    /* =========================================================
    PAGE BREAK
 ========================================================= */
 
-.page-break {
-    page-break-before: always;
-}
-
+    .page-break {
+        page-break-before: always;
+    }
 </style>
 
 
@@ -1069,7 +1032,7 @@ body {
         <div class="brand-wrapper">
 
             <div class="brand">
-                APPREXIA<span>.</span>
+                RAPPORT D'ANALYSE
             </div>
 
             <div class="subtitle">
@@ -1082,10 +1045,7 @@ body {
 
         </div>
 
-        <img
-            class="logo"
-            src="data:image/png;base64,${logoBase64}"
-        />
+        <img class="logo" src="data:image/png;base64,${logoBase64}" />
 
     </div>
 
@@ -1101,11 +1061,8 @@ body {
 
         <div class="property-image-wrapper">
 
-            <img
-                src="${data.imageUrl}"
-                class="property-image"
-                alt="Photo du bien"
-            />
+            <img src="${propertyImage}" class="property-image"
+                alt="Photo du bien" />
 
         </div>
 
@@ -1206,12 +1163,14 @@ body {
                 <strong>${data.recommendedPrice} €</strong>.
 
                 ${
-                    data.negotiationAmount > 0
-                        ? `L'analyse identifie un potentiel de négociation
-                       d'environ <strong>${data.negotiationAmount} €</strong>.`
-                        : `Le prix apparaît cohérent avec les références
-                       de marché disponibles.`
-                }
+          data.negotiationAmount > 0
+
+            ? `L'analyse identifie un potentiel de négociation
+                d'environ <strong>${data.negotiationAmount} €</strong>.`
+
+            : `Le prix apparaît cohérent avec les références
+                de marché disponibles.`
+        }
 
             </p>
 
@@ -1419,12 +1378,16 @@ body {
                     <tr>
 
                         <td class="data-label">
-                            Négociation possible
+                            Négociation estimée
                         </td>
 
                         <td class="data-value accent">
 
-                            ${data.negotiationAmount > 0 ? `${data.negotiationAmount} €` : 'Aucune'}
+                            ${
+          data.negotiationAmount > 0
+            ? `${data.negotiationAmount} €`
+            : 'Aucune'
+        }
 
                         </td>
 
@@ -1687,14 +1650,12 @@ body {
                 </table>
 
 
-                <p
-                    style="
+                <p style="
                         margin:8px 0 0;
                         color:#858eaa;
                         font-size:10.5px;
                         line-height:1.5;
-                    "
-                >
+                    ">
                     ${data.yieldAnalysis}
                 </p>
 
@@ -1718,22 +1679,24 @@ body {
                 </div>
 
 
-                <p
-                    style="
+                <p style="
                         margin:0;
                         color:#c2c8da;
                         font-size:11px;
                         line-height:1.55;
-                    "
-                >
+                    ">
 
                     ${
-                        data.marketPosition === 'SOUS_PRIX'
-                            ? 'Le bien semble proposé sous les références du marché observées.'
-                            : data.marketPosition === 'PRIX_MARCHE'
-                              ? 'Le prix apparaît cohérent avec les références de marché disponibles.'
-                              : 'Le prix affiché apparaît supérieur aux références disponibles.'
-                    }
+          data.marketPosition === 'SOUS_PRIX'
+
+            ? 'Le bien semble proposé sous les références du marché observées.'
+
+            : data.marketPosition === 'PRIX_MARCHE'
+
+              ? 'Le prix apparaît cohérent avec les références de marché disponibles.'
+
+              : 'Le prix affiché apparaît supérieur aux références disponibles.'
+        }
 
                 </p>
 
@@ -1772,25 +1735,27 @@ body {
 
                     ${data.strengths
 
-                        .map(
-                            (item) => `
+          .map(
 
-                                <li>
+            (item) => `
 
-                                    <span class="check">
-                                        ✓
-                                    </span>
+                    <li>
 
-                                    <span>
-                                        ${item}
-                                    </span>
+                        <span class="check">
+                            ✓
+                        </span>
 
-                                </li>
+                        <span>
+                            ${item}
+                        </span>
 
-                            `,
-                        )
+                    </li>
 
-                        .join('')}
+                    `
+
+          )
+
+          .join('')}
 
                 </ul>
 
@@ -1818,25 +1783,27 @@ body {
 
                     ${data.risks
 
-                        .map(
-                            (item) => `
+          .map(
 
-                                <li>
+            (item) => `
 
-                                    <span class="warning">
-                                        !
-                                    </span>
+                    <li>
 
-                                    <span>
-                                        ${item}
-                                    </span>
+                        <span class="warning">
+                            !
+                        </span>
 
-                                </li>
+                        <span>
+                            ${item}
+                        </span>
 
-                            `,
-                        )
+                    </li>
 
-                        .join('')}
+                    `
+
+          )
+
+          .join('')}
 
                 </ul>
 
@@ -1884,16 +1851,18 @@ body {
                 <strong>${data.recommendedPrice} €</strong>.
 
                 ${
-                    data.negotiationAmount > 0
-                        ? `Une offre autour de
-                       <strong>${data.recommendedPrice} €</strong>
-                       apparaît cohérente au regard des références
-                       analysées, avec un potentiel de négociation
-                       estimé à
-                       <strong>${data.negotiationAmount} €</strong>.`
-                        : `Le prix affiché apparaît cohérent avec les
-                       références disponibles sur le marché.`
-                }
+          data.negotiationAmount > 0
+
+            ? `Une offre autour de
+                <strong>${data.recommendedPrice} €</strong>
+                apparaît cohérente au regard des références
+                analysées, avec un potentiel de négociation
+                estimé à
+                <strong>${data.negotiationAmount} €</strong>.`
+
+            : `Le prix affiché apparaît cohérent avec les
+                références disponibles sur le marché.`
+        }
 
             </p>
 
@@ -1980,6 +1949,37 @@ body {
             return Buffer.from(pdf);
         } finally {
             await browser.close();
+        }
+    }
+
+    private async getPropertyImage(imageUrl: string | null | undefined): Promise<string> {
+        const placeholderUrl = `${process.env.FRONTEND_URL}/images/placeholder.png`;
+
+        try {
+            if (!imageUrl) {
+                return placeholderUrl;
+            }
+
+            const response = await axios.get(imageUrl, {
+                responseType: 'arraybuffer',
+                timeout: 5000,
+            });
+
+            const contentType = String(
+              response.headers['content-type'] ?? '',
+            );
+
+            if (!contentType.startsWith('image/')) {
+                return placeholderUrl;
+            }
+
+            const base64 = Buffer.from(response.data).toString('base64');
+
+            return `data:${contentType};base64,${base64}`;
+        } catch (error) {
+            console.warn('Impossible de charger image annonce, utilisation du placeholder', imageUrl);
+
+            return placeholderUrl;
         }
     }
 }

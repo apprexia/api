@@ -20,15 +20,11 @@ export class CommuneIndicatorService {
      * Recherche du contexte local à partir de la ville
      * et, si disponible, du code postal.
      *
-     * La recherche utilise :
-     * 1. Le nom normalisé de la commune
-     * 2. Le département déduit du code postal
-     * 3. Une gestion spécifique des arrondissements
-     *    de Paris, Marseille et Lyon
-     *
-     * En cas d'ambiguïté impossible à résoudre,
-     * la méthode retourne null plutôt que de sélectionner
-     * arbitrairement la première commune.
+     * Ordre de résolution :
+     * 1. Nom normalisé
+     * 2. Paris / Marseille / Lyon via code postal
+     * 3. Département via code postal
+     * 4. Si ambiguïté persistante → null
      */
     async findByLocation(city?: string, codePostal?: string) {
         console.log('COMMUNE LOOKUP', {
@@ -97,17 +93,84 @@ export class CommuneIndicatorService {
 
         // =====================================================
         // 5. PLUSIEURS COMMUNES
-        //    → UTILISATION DU CODE POSTAL
+        //    → LE CODE POSTAL DEVIENT PRIORITAIRE
         // =====================================================
 
         if (codePostal) {
             const cp = codePostal.replace(/\s/g, '');
+            const cpNumber = Number(cp);
+
+            // ===================================================
+            // 5A. PARIS
+            // ===================================================
+
+            if (cleanCity === 'PARIS' && cpNumber >= 75001 && cpNumber <= 75020) {
+                const arrondissement = cpNumber - 75000;
+
+                const expectedInsee = `751${String(arrondissement).padStart(2, '0')}`;
+
+                const commune = communes.find((c) => c.codeInsee === expectedInsee);
+
+                if (commune) {
+                    console.log('✅ COMMUNE FOUND BY PARIS ARRONDISSEMENT', {
+                        codeInsee: commune.codeInsee,
+                        commune: commune.commune,
+                        codePostal: cp,
+                    });
+
+                    return commune;
+                }
+            }
+
+            // ===================================================
+            // 5B. MARSEILLE
+            // ===================================================
+
+            if (cleanCity === 'MARSEILLE' && cpNumber >= 13001 && cpNumber <= 13016) {
+                const arrondissement = cpNumber - 13000;
+
+                const expectedInsee = `132${String(arrondissement).padStart(2, '0')}`;
+
+                const commune = communes.find((c) => c.codeInsee === expectedInsee);
+
+                if (commune) {
+                    console.log('✅ COMMUNE FOUND BY MARSEILLE ARRONDISSEMENT', {
+                        codeInsee: commune.codeInsee,
+                        commune: commune.commune,
+                        codePostal: cp,
+                    });
+
+                    return commune;
+                }
+            }
+
+            // ===================================================
+            // 5C. LYON
+            // ===================================================
+
+            if (cleanCity === 'LYON' && cpNumber >= 69001 && cpNumber <= 69009) {
+                const arrondissement = cpNumber - 69000;
+
+                const expectedInsee = `693${String(arrondissement).padStart(2, '0')}`;
+
+                const commune = communes.find((c) => c.codeInsee === expectedInsee);
+
+                if (commune) {
+                    console.log('✅ COMMUNE FOUND BY LYON ARRONDISSEMENT', {
+                        codeInsee: commune.codeInsee,
+                        commune: commune.commune,
+                        codePostal: cp,
+                    });
+
+                    return commune;
+                }
+            }
+
+            // ===================================================
+            // 5D. DÉPARTEMENT
+            // ===================================================
 
             let codeDepartement: string | null = null;
-
-            // ===================================================
-            // France métropolitaine
-            // ===================================================
 
             if (/^\d{5}$/.test(cp)) {
                 // DOM
@@ -132,10 +195,6 @@ export class CommuneIndicatorService {
                 }
             }
 
-            // ===================================================
-            // 5A. Recherche par département
-            // ===================================================
-
             if (codeDepartement) {
                 console.log('COMMUNE DEPARTMENT LOOKUP', {
                     city: cleanCity,
@@ -156,86 +215,10 @@ export class CommuneIndicatorService {
                     return communeByDepartment;
                 }
             }
-
-            // ===================================================
-            // 5B. PARIS
-            // ===================================================
-
-            const cpNumber = Number(cp);
-
-            if (cpNumber >= 75001 && cpNumber <= 75020) {
-                const commune = communes.find((c) => {
-                    const insee = Number(c.codeInsee);
-
-                    return insee === 75100 + (cpNumber - 75000);
-                });
-
-                if (commune) {
-                    console.log('✅ COMMUNE FOUND BY PARIS ARRONDISSEMENT', {
-                        codeInsee: commune.codeInsee,
-                        commune: commune.commune,
-                        codePostal: cp,
-                    });
-
-                    return commune;
-                }
-            }
-
-            // ===================================================
-            // 5C. MARSEILLE
-            // ===================================================
-
-            if (cpNumber >= 13001 && cpNumber <= 13016) {
-                const commune = communes.find((c) => {
-                    const insee = Number(c.codeInsee);
-
-                    return insee === 13200 + (cpNumber - 13000);
-                });
-
-                if (commune) {
-                    console.log('✅ COMMUNE FOUND BY MARSEILLE ARRONDISSEMENT', {
-                        codeInsee: commune.codeInsee,
-                        commune: commune.commune,
-                        codePostal: cp,
-                    });
-
-                    return commune;
-                }
-            }
-
-            // ===================================================
-            // 5D. LYON
-            // ===================================================
-
-            if (cpNumber >= 69001 && cpNumber <= 69009) {
-                const commune = communes.find((c) => {
-                    const insee = Number(c.codeInsee);
-
-                    return insee === 69380 + (cpNumber - 69000);
-                });
-
-                if (commune) {
-                    console.log('✅ COMMUNE FOUND BY LYON ARRONDISSEMENT', {
-                        codeInsee: commune.codeInsee,
-                        commune: commune.commune,
-                        codePostal: cp,
-                    });
-
-                    return commune;
-                }
-            }
         }
 
         // =====================================================
         // 6. SÉCURITÉ
-        //
-        // Ne surtout pas faire :
-        //
-        // return communes[0];
-        //
-        // Si plusieurs communes existent et que nous ne
-        // pouvons pas déterminer laquelle est correcte,
-        // on retourne null.
         // =====================================================
 
         console.warn('⚠️ COMMUNE AMBIGUOUS - IMPOSSIBLE TO DETERMINE', {

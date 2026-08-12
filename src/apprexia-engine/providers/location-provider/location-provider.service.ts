@@ -2,21 +2,49 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { GeoLocation, LocationEngineInput, NearbyPlace } from '../../interfaces/location-analysis.interface';
 
-import { OverpassElement, OverpassResponse } from './interfaces/overpass-response.interface';
-
 import { PrismaService } from '../../../services/prisma/prisma.service';
+
+interface GeoapifyFeature {
+    type: 'Feature';
+
+    properties: {
+        name?: string;
+
+        lat?: number;
+        lon?: number;
+
+        categories?: string[];
+
+        city?: string;
+        postcode?: string;
+        street?: string;
+        housenumber?: string;
+
+        formatted?: string;
+
+        [key: string]: any;
+    };
+
+    geometry?: {
+        type: string;
+        coordinates?: [number, number];
+    };
+}
+
+interface GeoapifyResponse {
+    type: 'FeatureCollection';
+    features: GeoapifyFeature[];
+}
 
 @Injectable()
 export class LocationProviderService {
     private readonly logger = new Logger(LocationProviderService.name);
 
-    private readonly CACHE_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 jours
+    private readonly CACHE_DURATION = 30 * 24 * 60 * 60 * 1000;
 
-    private readonly overpassUrls = [
-        'https://overpass-api.de/api/interpreter',
-        'https://overpass.kumi.systems/api/interpreter',
-        'https://overpass.private.coffee/api/interpreter',
-    ];
+    private readonly geoapifyUrl = 'https://api.geoapify.com/v2/places';
+
+    private readonly geoapifyApiKey = process.env.GEOAPIFY_API_KEY;
 
     constructor(private readonly prisma: PrismaService) {}
 
@@ -33,14 +61,19 @@ export class LocationProviderService {
          * ===============================
          */
 
+        const latitudeKey = Number(latitude.toFixed(3));
+        const longitudeKey = Number(longitude.toFixed(3));
+
         let cached: Awaited<ReturnType<typeof this.prisma.locationCache.findUnique>> = null;
 
         if (city && codePostal) {
             cached = await this.prisma.locationCache.findUnique({
                 where: {
-                    city_codePostal_radius: {
+                    city_codePostal_latitude_longitude_radius: {
                         city,
                         codePostal,
+                        latitude: latitudeKey,
+                        longitude: longitudeKey,
                         radius,
                     },
                 },
@@ -49,46 +82,20 @@ export class LocationProviderService {
             const expired = cached && Date.now() - cached.updatedAt.getTime() > this.CACHE_DURATION;
 
             if (cached && !expired) {
-                this.logger.log(`Location cache utilisé : ${city} ${codePostal}`);
+                this.logger.log(`Location cache utilisé : ${city} ${codePostal} (${latitudeKey}, ${longitudeKey})`);
 
                 return cached.data as unknown as LocationEngineInput;
             }
         }
+
         /**
          * ===============================
-         * OVERPASS QUERY
+         * GEOAPIFY
          * ===============================
          */
 
-        const query = `
-[out:json][timeout:25];
-
-(
-nwr(around:${radius},${latitude},${longitude})[station=subway];
-
-nwr(around:${radius},${latitude},${longitude})[railway=station];
-
-nwr(around:600,${latitude},${longitude})[highway=bus_stop];
-
-nwr(around:800,${latitude},${longitude})[shop=supermarket];
-
-nwr(around:500,${latitude},${longitude})[shop=bakery];
-
-nwr(around:1200,${latitude},${longitude})[amenity=kindergarten];
-
-nwr(around:1200,${latitude},${longitude})[amenity=school];
-
-nwr(around:2000,${latitude},${longitude})[amenity=college];
-
-nwr(around:3000,${latitude},${longitude})[amenity=university];
-
-);
-
-out center tags;
-`;
-
         try {
-            const data = await this.callOverpass(query);
+            const data = await this.callGeoapify(latitude, longitude, radius);
 
             const result = this.buildLocationResult(data, latitude, longitude);
 
@@ -101,9 +108,11 @@ out center tags;
             if (city && codePostal) {
                 await this.prisma.locationCache.upsert({
                     where: {
-                        city_codePostal_radius: {
+                        city_codePostal_latitude_longitude_radius: {
                             city,
                             codePostal,
+                            latitude: latitudeKey,
+                            longitude: longitudeKey,
                             radius,
                         },
                     },
@@ -119,8 +128,8 @@ out center tags;
                         codePostal,
                         radius,
 
-                        latitude,
-                        longitude,
+                        latitude: latitudeKey,
+                        longitude: longitudeKey,
 
                         data: result as any,
                     },
@@ -129,10 +138,14 @@ out center tags;
 
             return result;
         } catch (error) {
-            this.logger.warn('Impossible de récupérer les données Overpass');
+            this.logger.warn(
+                `Impossible de récupérer les données Geoapify : ${error instanceof Error ? error.message : error}`,
+            );
 
             /**
-             * fallback cache même expiré
+             * ===============================
+             * FALLBACK CACHE EXPIRÉ
+             * ===============================
              */
 
             if (cached) {
@@ -146,20 +159,116 @@ out center tags;
     }
 
     /**
-     * Construction du résultat moteur
+     * ===============================
+     * GEOAPIFY REQUEST
+     * ===============================
      */
-    private buildLocationResult(data: OverpassResponse, latitude: number, longitude: number): LocationEngineInput {
-        const elements = data.elements;
 
-        this.logger.log(`Overpass résultats : ${elements.length} éléments`);
+    private async callGeoapify(latitude: number, longitude: number, radius: number): Promise<GeoapifyResponse> {
+        if (!this.geoapifyApiKey) {
+            throw new Error('GEOAPIFY_API_KEY non configurée');
+        }
 
-        elements.forEach((element) => {
-            const coords = this.extractCoordinates(element);
+        /**
+         * Catégories nécessaires à Apprexia
+         */
+        const categories = [
+            'public_transport',
+            'commercial.supermarket',
+            'commercial.food_and_drink.bakery',
+            'childcare.kindergarten',
+            'education.school',
+            'education.college',
+            'education.university',
+        ].join(',');
 
-            if (coords) {
-                element.distance = this.distanceInMeters(latitude, longitude, coords.lat, coords.lon);
+        /**
+         * Geoapify utilise un cercle :
+         *
+         * circle:lon,lat,radius
+         *
+         * Attention :
+         * longitude avant latitude.
+         */
+
+        const filter = `circle:${longitude},${latitude},${radius}`;
+
+        const url = new URL(this.geoapifyUrl);
+
+        url.searchParams.set('categories', categories);
+        url.searchParams.set('filter', filter);
+        url.searchParams.set('limit', '100');
+        url.searchParams.set('apiKey', this.geoapifyApiKey);
+
+        this.logger.log(`Geoapify Places : ${categories}`);
+
+        const controller = new AbortController();
+
+        const timeout = setTimeout(() => controller.abort(), 8000);
+
+        try {
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+
+                headers: {
+                    Accept: 'application/json',
+                    'User-Agent': 'Apprexia/1.0',
+                },
+
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+
+                throw new Error(`Geoapify HTTP ${response.status}: ${text}`);
             }
-        });
+
+            const data = (await response.json()) as GeoapifyResponse;
+
+            this.logger.log(`Geoapify résultats : ${data.features?.length ?? 0} éléments`);
+
+            return data;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    /**
+     * ===============================
+     * BUILD RESULT
+     * ===============================
+     */
+
+    private buildLocationResult(data: GeoapifyResponse, latitude: number, longitude: number): LocationEngineInput {
+        const features = data.features ?? [];
+
+        this.logger.log(`Construction LocationEngineInput depuis ${features.length} résultats Geoapify`);
+
+        /**
+         * Ajouter la distance à chaque résultat
+         */
+        const places = features
+            .map((feature) => {
+                const coords = this.extractCoordinates(feature);
+
+                if (!coords) {
+                    return undefined;
+                }
+
+                const distance = this.distanceInMeters(latitude, longitude, coords.lat, coords.lon);
+
+                return {
+                    feature,
+                    coords,
+                    distance,
+                };
+            })
+            .filter(Boolean) as Array<{
+            feature: GeoapifyFeature;
+            coords: GeoLocation;
+            distance: number;
+        }>;
 
         return {
             property: {
@@ -168,37 +277,43 @@ out center tags;
             },
 
             transport: {
-                metro: this.findNearestMetro(elements),
+                metro: this.findNearestMetro(places),
 
-                trainStation: this.findNearest(elements, 'railway', 'station'),
+                trainStation: this.findNearestTrainStation(places),
 
-                bus: this.findNearest(elements, 'highway', 'bus_stop'),
+                bus: this.findNearestBus(places),
             },
 
             shopping: {
-                supermarket: this.findNearest(elements, 'shop', 'supermarket'),
+                supermarket: this.findNearestCategory(places, 'commercial.supermarket', 'Supermarché'),
 
-                bakery: this.findNearest(elements, 'shop', 'bakery'),
+                bakery: this.findNearestCategory(places, 'commercial.food_and_drink.bakery', 'Boulangerie'),
             },
 
             education: {
-                kindergarten: this.findNearest(elements, 'amenity', 'kindergarten'),
+                kindergarten: this.findNearestCategory(places, 'childcare.kindergarten', 'École maternelle'),
 
-                school: this.findNearest(elements, 'amenity', 'school'),
+                school: this.findNearestCategory(places, 'education.school', 'École'),
 
-                highSchool: this.findNearest(elements, 'amenity', 'college'),
+                highSchool: this.findNearestCategory(places, 'education.college', 'Établissement scolaire'),
 
-                university: this.findNearest(elements, 'amenity', 'university'),
+                university: this.findNearestCategory(places, 'education.university', 'Université'),
 
-                businessSchool: this.findBusinessSchool(elements),
+                businessSchool: this.findBusinessSchool(places),
             },
         };
     }
 
-    private extractCoordinates(element: OverpassElement): GeoLocation | undefined {
-        const lat = element.lat ?? element.center?.lat;
+    /**
+     * ===============================
+     * COORDINATES
+     * ===============================
+     */
 
-        const lon = element.lon ?? element.center?.lon;
+    private extractCoordinates(feature: GeoapifyFeature): GeoLocation | undefined {
+        const lon = feature.properties.lon ?? feature.geometry?.coordinates?.[0];
+
+        const lat = feature.properties.lat ?? feature.geometry?.coordinates?.[1];
 
         if (lat === undefined || lon === undefined) {
             return undefined;
@@ -210,118 +325,154 @@ out center tags;
         };
     }
 
-    private async callOverpass(query: string): Promise<OverpassResponse> {
-        const requests = this.overpassUrls.map(async (url) => {
-            this.logger.log(`Tentative Overpass : ${url}`);
+    /**
+     * ===============================
+     * TRANSPORT
+     * ===============================
+     */
 
-            const controller = new AbortController();
+    private findNearestMetro(
+        places: Array<{
+            feature: GeoapifyFeature;
+            coords: GeoLocation;
+            distance: number;
+        }>,
+    ): NearbyPlace | undefined {
+        const matches = places.filter((place) => {
+            const categories = place.feature.properties.categories ?? [];
 
-            const timeout = setTimeout(() => controller.abort(), 4000);
-
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-
-                    headers: {
-                        Accept: 'application/json',
-
-                        'User-Agent': 'Apprexia/1.0',
-                    },
-
-                    body: new URLSearchParams({
-                        data: query,
-                    }),
-
-                    signal: controller.signal,
-                });
-
-                clearTimeout(timeout);
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-
-                return await response.json();
-            } catch (error) {
-                clearTimeout(timeout);
-
-                this.logger.warn(`Overpass indisponible : ${url}`);
-
-                throw error;
-            }
-        });
-
-        try {
-            return await Promise.any(requests);
-        } catch {
-            throw new Error('Tous les serveurs Overpass sont indisponibles');
-        }
-    }
-
-    private findNearestMetro(elements: OverpassElement[]): NearbyPlace | undefined {
-        const matches = elements.filter(
-            (e) => e.tags?.station === 'subway' || e.tags?.subway === 'yes' || e.tags?.railway === 'subway_entrance',
-        );
-
-        if (!matches.length) {
-            return undefined;
-        }
-
-        matches.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
-
-        return this.toNearbyPlace(matches[0], 'Entrée métro');
-    }
-
-    private findBusinessSchool(elements: OverpassElement[]): NearbyPlace | undefined {
-        const schools = elements.filter((element) => {
-            const name = element.tags?.name?.toLowerCase();
-
-            return (
-                name?.includes('business') ||
-                name?.includes('commerce') ||
-                name?.includes('management') ||
-                name?.includes('school')
+            return categories.some(
+                (category) => category === 'public_transport.subway' || category.startsWith('public_transport.subway'),
             );
         });
 
-        if (!schools.length) {
+        return this.getNearestPlace(matches, 'Métro');
+    }
+
+    private findNearestTrainStation(
+        places: Array<{
+            feature: GeoapifyFeature;
+            coords: GeoLocation;
+            distance: number;
+        }>,
+    ): NearbyPlace | undefined {
+        const matches = places.filter((place) => {
+            const categories = place.feature.properties.categories ?? [];
+
+            return categories.some((category) => category.includes('railway') || category.includes('train'));
+        });
+
+        return this.getNearestPlace(matches, 'Gare');
+    }
+
+    private findNearestBus(
+        places: Array<{
+            feature: GeoapifyFeature;
+            coords: GeoLocation;
+            distance: number;
+        }>,
+    ): NearbyPlace | undefined {
+        const matches = places.filter((place) => {
+            const categories = place.feature.properties.categories ?? [];
+
+            return categories.some((category) => category.includes('bus') || category.includes('public_transport'));
+        });
+
+        return this.getNearestPlace(matches, 'Arrêt de bus');
+    }
+
+    /**
+     * ===============================
+     * CATEGORY SEARCH
+     * ===============================
+     */
+
+    private findNearestCategory(
+        places: Array<{
+            feature: GeoapifyFeature;
+            coords: GeoLocation;
+            distance: number;
+        }>,
+        category: string,
+        fallback: string,
+    ): NearbyPlace | undefined {
+        const matches = places.filter((place) => {
+            const categories = place.feature.properties.categories ?? [];
+
+            return categories.includes(category);
+        });
+
+        return this.getNearestPlace(matches, fallback);
+    }
+
+    /**
+     * ===============================
+     * BUSINESS SCHOOL
+     * ===============================
+     */
+
+    private findBusinessSchool(
+        places: Array<{
+            feature: GeoapifyFeature;
+            coords: GeoLocation;
+            distance: number;
+        }>,
+    ): NearbyPlace | undefined {
+        const matches = places.filter((place) => {
+            const categories = place.feature.properties.categories ?? [];
+
+            const name = place.feature.properties.name?.toLowerCase() ?? '';
+
+            return (
+                categories.some((category) => category.includes('college') || category.includes('university')) &&
+                (name.includes('business') ||
+                    name.includes('commerce') ||
+                    name.includes('management') ||
+                    name.includes('school'))
+            );
+        });
+
+        return this.getNearestPlace(matches, 'École supérieure');
+    }
+
+    /**
+     * ===============================
+     * NEAREST
+     * ===============================
+     */
+
+    private getNearestPlace(
+        places: Array<{
+            feature: GeoapifyFeature;
+            coords: GeoLocation;
+            distance: number;
+        }>,
+        fallback: string,
+    ): NearbyPlace | undefined {
+        if (!places.length) {
             return undefined;
         }
 
-        schools.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+        places.sort((a, b) => a.distance - b.distance);
 
-        return this.toNearbyPlace(schools[0], 'École supérieure');
-    }
-
-    private findNearest(elements: OverpassElement[], key: string, value: string): NearbyPlace | undefined {
-        const matches = elements.filter((e) => e.tags?.[key] === value);
-
-        if (!matches.length) {
-            return undefined;
-        }
-
-        matches.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
-
-        return this.toNearbyPlace(matches[0], value);
-    }
-
-    private toNearbyPlace(element: OverpassElement, fallback: string): NearbyPlace {
-        const coords = this.extractCoordinates(element);
-
-        if (!coords) {
-            throw new Error('Coordonnées manquantes');
-        }
+        const place = places[0];
 
         return {
-            name: element.tags?.name ?? fallback,
+            name: place.feature.properties.name ?? fallback,
 
-            distance: Math.round(element.distance ?? 0),
+            distance: Math.round(place.distance),
 
-            walkingTime: Math.round((element.distance ?? 0) / 80),
+            walkingTime: Math.max(1, Math.round(place.distance / 80)),
 
-            ...coords,
+            ...place.coords,
         };
     }
+
+    /**
+     * ===============================
+     * DISTANCE
+     * ===============================
+     */
 
     private distanceInMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
         const R = 6371000;

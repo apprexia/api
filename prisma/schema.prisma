@@ -279,5 +279,5 @@ model LocationCache {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([city, codePostal, radius])
+  @@unique([city, codePostal, latitude, longitude, radius])
 }

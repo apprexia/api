@@ -34,7 +34,7 @@ export class AuthService {
     async loginWithGoogle(googleUser: { email: string; name?: string; avatar?: string }) {
         let user = await this.prisma.user.findUnique({
             where: {
-                email: googleUser.email,
+                email: googleUser?.email,
             },
         });
 
