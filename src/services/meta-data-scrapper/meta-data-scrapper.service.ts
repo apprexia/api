@@ -654,7 +654,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
 
             this.browser = await chromium.launch({
                 headless: false,
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
+                args: ['--disable-blink-features=AutomationControlled'],
             });
         }
 
