@@ -129,6 +129,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`URL originale : ${url}`);
         this.logger.log(`URL utilisée scraping : ${normalizedUrl}`);
         this.logger.log(`📱 Device analyse : ${device}`);
+        this.logger.log(`🔗 LinkPreview reçu depuis le front`, linkPreview);
 
         // =====================================================
         // 1. LINKPREVIEW FOURNI PAR LE FRONT
