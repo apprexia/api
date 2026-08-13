@@ -638,24 +638,67 @@ export class AnalysesService {
         };
     }
 
-    private getSourceSite(url: string): string {
-        const hostname = new URL(url).hostname.replace('www.', '');
+    private cleanUrl(rawUrl: string): string {
+        if (!rawUrl) {
+            return rawUrl;
+        }
 
-        const sources: Record<string, string> = {
-            'pap.fr': 'pap',
-            'leboncoin.fr': 'leboncoin',
-            'seloger.com': 'seloger',
-            'bienici.com': 'bienici',
-            'ladresse.com': 'ladresse',
-            'logic-immo.com': 'logicimmo',
-            'orpi.com': 'orpi',
-            'century21.fr': 'century21',
-            'paruvendu.fr': 'paruvendu',
-            'immobilier.lefigaro.fr': 'figaroimmo',
-            'guy-hoquet.com': 'guyhoquet',
-        };
+        const value = rawUrl.trim();
 
-        return sources[hostname] ?? hostname;
+        // =====================================================
+        // 1. URL Markdown
+        //    [https://example.com](https://example.com)
+        // =====================================================
+
+        const markdownMatch = value.match(/\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/i);
+
+        if (markdownMatch?.[1]) {
+            return markdownMatch[1].replace(/[)\]}>,]+$/, '').trim();
+        }
+
+        // =====================================================
+        // 2. Cherche une URL HTTP/HTTPS dans un texte
+        // =====================================================
+
+        const urlMatch = value.match(/https?:\/\/[^\s<>"'\])}]+/i);
+
+        if (urlMatch?.[0]) {
+            return urlMatch[0].replace(/[)\]}>,.]+$/, '').trim();
+        }
+
+        // =====================================================
+        // 3. Aucun lien trouvé
+        // =====================================================
+
+        return value;
+    }
+
+    private getSourceSite(rawUrl: string): string {
+        const url = this.cleanUrl(rawUrl);
+
+        try {
+            const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+
+            const sources: Record<string, string> = {
+                'pap.fr': 'pap',
+                'leboncoin.fr': 'leboncoin',
+                'seloger.com': 'seloger',
+                'bienici.com': 'bienici',
+                'ladresse.com': 'ladresse',
+                'logic-immo.com': 'logicimmo',
+                'orpi.com': 'orpi',
+                'century21.fr': 'century21',
+                'paruvendu.fr': 'paruvendu',
+                'immobilier.lefigaro.fr': 'figaroimmo',
+                'guy-hoquet.com': 'guyhoquet',
+            };
+
+            return sources[hostname] ?? hostname;
+        } catch {
+            this.logger.warn(`⚠️ Impossible de déterminer le site source depuis : ${rawUrl}`);
+
+            return 'unknown';
+        }
     }
 
     private validateMetadata(metadata: ListingMetadata) {

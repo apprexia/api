@@ -100,72 +100,6 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         private readonly configService: ConfigService,
     ) {}
 
-    private cleanUrl(rawUrl: string): string {
-        if (!rawUrl) {
-            return rawUrl;
-        }
-
-        // Cherche le début réel de l'URL
-        const httpsIndex = rawUrl.indexOf('https://');
-
-        if (httpsIndex === -1) {
-            return rawUrl.trim();
-        }
-
-        let url = rawUrl.substring(httpsIndex).trim();
-
-        // Supprime un éventuel texte parasite après l'URL
-        const spaceIndex = url.search(/\s/);
-
-        if (spaceIndex !== -1) {
-            url = url.substring(0, spaceIndex);
-        }
-
-        // Nettoyage de caractères ajoutés autour de l'URL
-        url = url.replace(/[)\]}>,]+$/, '');
-
-        return url;
-    }
-
-    private normalizeUrl(rawUrl: string): string {
-        const url = this.cleanUrl(rawUrl);
-
-        try {
-            const parsedUrl = new URL(url);
-
-            const hostname = parsedUrl.hostname.toLowerCase();
-            const pathname = parsedUrl.pathname.toLowerCase();
-
-            // SELOGER
-            if (hostname.includes('seloger.com')) {
-                if (pathname.includes('/wl-cdp/')) {
-                    return url;
-                }
-
-                return `${parsedUrl.origin}${parsedUrl.pathname}?utm_medium=desktop-web&utm_source=seloger&utm_campaign=on-site_message-sharing&utm_content=cdp&utm_term=sharing`;
-            }
-
-            // LOGIC-IMMO
-            if (hostname.includes('logic-immo.com')) {
-                if (/\/detail-vente-\d+\.htm/i.test(pathname) || pathname.includes('/detail-annonce/')) {
-                    return url;
-                }
-
-                return `${parsedUrl.origin}${parsedUrl.pathname}?utm_medium=desktop-web&utm_source=logicimmo&utm_campaign=on-site_message-sharing&utm_content=cdp&utm_term=sharing`;
-            }
-
-            // LE BON COIN
-            if (hostname.includes('leboncoin.fr')) {
-                return url;
-            }
-
-            // Autres sites
-            return url;
-        } catch {
-            return url;
-        }
-    }
-
     private browser;
 
     async onModuleInit() {
@@ -253,6 +187,88 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             this.logger.warn(`🖥️ Erreur Axios/Cheerio → fallback Playwright`);
 
             return await this.scrapeWithPlaywright(normalizedUrl);
+        }
+    }
+
+    private cleanUrl(rawUrl: string): string {
+        if (!rawUrl) {
+            return rawUrl;
+        }
+
+        const value = rawUrl.trim();
+
+        // =====================================================
+        // 1. URL Markdown
+        //    [https://example.com](https://example.com)
+        // =====================================================
+
+        const markdownMatch = value.match(
+          /\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/i,
+        );
+
+        if (markdownMatch?.[1]) {
+            return markdownMatch[1]
+              .replace(/[)\]}>,]+$/, '')
+              .trim();
+        }
+
+        // =====================================================
+        // 2. Cherche une URL HTTP/HTTPS dans un texte
+        // =====================================================
+
+        const urlMatch = value.match(
+          /https?:\/\/[^\s<>"'\])}]+/i,
+        );
+
+        if (urlMatch?.[0]) {
+            return urlMatch[0]
+              .replace(/[)\]}>,.]+$/, '')
+              .trim();
+        }
+
+        // =====================================================
+        // 3. Aucun lien trouvé
+        // =====================================================
+
+        return value;
+    }
+
+    private normalizeUrl(rawUrl: string): string {
+        const url = this.cleanUrl(rawUrl);
+
+        try {
+            const parsedUrl = new URL(url);
+
+            const hostname = parsedUrl.hostname.toLowerCase();
+            const pathname = parsedUrl.pathname.toLowerCase();
+
+            // SELOGER
+            if (hostname.includes('seloger.com')) {
+                if (pathname.includes('/wl-cdp/')) {
+                    return url;
+                }
+
+                return `${parsedUrl.origin}${parsedUrl.pathname}?utm_medium=desktop-web&utm_source=seloger&utm_campaign=on-site_message-sharing&utm_content=cdp&utm_term=sharing`;
+            }
+
+            // LOGIC-IMMO
+            if (hostname.includes('logic-immo.com')) {
+                if (/\/detail-vente-\d+\.htm/i.test(pathname) || pathname.includes('/detail-annonce/')) {
+                    return url;
+                }
+
+                return `${parsedUrl.origin}${parsedUrl.pathname}?utm_medium=desktop-web&utm_source=logicimmo&utm_campaign=on-site_message-sharing&utm_content=cdp&utm_term=sharing`;
+            }
+
+            // LE BON COIN
+            if (hostname.includes('leboncoin.fr')) {
+                return url;
+            }
+
+            // Autres sites
+            return url;
+        } catch {
+            return url;
         }
     }
 
