@@ -443,7 +443,7 @@ export class OpenaiService {
     `;
 
         const response = await this.openAI.responses.create({
-            model: 'gpt-4.1-mini',
+            model: 'gpt-5-mini',
 
             input: `
     Tu es un expert immobilier spécialisé dans l'investissement locatif en France.
@@ -1643,6 +1643,391 @@ export class OpenaiService {
         };
     }
 
+    async extractListingMetadata(input: { url: string }): Promise<ListingMetadata> {
+        const url = input.url.toLowerCase();
+
+        const supportedSources = ['seloger.com', 'leboncoin.fr', 'logic-immo.com'];
+
+        const isSupportedSource = supportedSources.some((domain) => url.includes(domain));
+
+        if (!isSupportedSource) {
+            throw new Error(`OpenAI listing extraction not supported for URL: ${input.url}`);
+        }
+
+        this.logger.log(`🤖 OPENAI WEB SCRAPING → ${input.url}`);
+
+        const prompt = `
+Tu es un expert français spécialisé dans l'extraction de données immobilières.
+
+Tu dois ouvrir et analyser directement cette annonce immobilière :
+
+${input.url}
+
+IMPORTANT :
+- Utilise la recherche Web pour ouvrir l'URL fournie.
+- Lis directement la page de l'annonce.
+- Ne te contente pas de rechercher l'URL sur Google.
+- Essaie d'ouvrir la page de l'annonce elle-même.
+- Si plusieurs résultats correspondent à l'annonce, privilégie toujours l'URL fournie.
+- Tu dois uniquement utiliser des informations explicitement présentes dans l'annonce.
+- Tu ne dois JAMAIS inventer une information.
+- Si une information est introuvable : null.
+
+────────────────────────────────
+INFORMATIONS À EXTRAIRE
+────────────────────────────────
+
+1. title
+Titre exact de l'annonce.
+
+2. price
+Prix du bien principal en nombre.
+
+Exemple :
+"376 000 €" => 376000
+
+3. typeLocal
+
+Valeurs autorisées :
+- Maison
+- Appartement
+- Terrain
+- Local commercial
+- Parking
+- Immeuble
+- Inconnu
+
+Normalisation :
+
+Studio, T1, T2, T3, T4, F1, F2, F3, loft habitable
+=> Appartement
+
+Maison, villa, pavillon, maison individuelle
+=> Maison
+
+Terrain, parcelle, terrain constructible
+=> Terrain
+
+Parking, box ou garage vendu seul
+=> Parking
+
+Local commercial, boutique, commerce
+=> Local commercial
+
+Immeuble entier
+=> Immeuble
+
+4. rooms
+
+Nombre de pièces principales.
+
+Exemples :
+Studio => 1
+T2 => 2
+T3 => 3
+T4 => 4
+
+Ne compte pas :
+- salle de bain
+- WC
+- couloir
+- dressing
+
+5. bedrooms
+
+Nombre de chambres.
+
+Exemple :
+"T4 avec 3 chambres" => 3
+
+Ne déduis jamais le nombre de chambres uniquement à partir du nombre de pièces.
+
+6. surface
+
+Surface principale du bien en m².
+
+Ne prends pas :
+- terrasse
+- balcon
+- jardin
+- terrain
+- cave
+- garage
+- parking
+
+Exemple :
+"Appartement 77 m² avec terrasse 39 m²"
+=> surface = 77
+
+7. city
+
+Commune dans laquelle se situe réellement le bien.
+
+Une ville simplement mentionnée comme :
+- proche de Paris
+- à 10 minutes de Versailles
+- à proximité de Lyon
+
+ne doit PAS être utilisée.
+
+Normalise la ville en MAJUSCULES.
+
+Exemple :
+Chessy => CHESSY
+Bussy-Saint-Georges => BUSSY-SAINT-GEORGES
+
+8. codePostal
+
+Code postal de la commune du bien.
+
+9. floor
+
+Étage du bien.
+
+Normalisation obligatoire :
+
+RDC
+=> 0
+
+Rez-de-chaussée
+=> 0
+
+1er étage
+=> 1
+
+1er
+=> 1
+
+2ème étage
+=> 2
+
+3ème étage
+=> 3
+
+etc.
+
+Si l'étage est inconnu :
+=> null
+
+IMPORTANT :
+"RDC/2" signifie :
+floor = 0
+
+Le "/2" signifie que l'immeuble possède 2 étages et ne doit pas être utilisé comme étage du bien.
+
+10. dpe
+
+Classe énergétique A à G.
+
+Exemples :
+"DPE : C" => "C"
+"Classe énergie C" => "C"
+
+Ne déduis jamais le DPE.
+
+11. ges
+
+Classe GES A à G.
+
+Exemples :
+"GES : C" => "C"
+"Classe climat C" => "C"
+
+Ne déduis jamais le GES.
+
+12. constructionYear
+
+Année de construction du bien.
+
+Exemples :
+"Construit en 2017" => 2017
+"Année de construction : 2017" => 2017
+
+Ne déduis jamais l'année de construction à partir :
+- de l'état du bâtiment ;
+- du DPE ;
+- de l'apparence ;
+- de l'année de rénovation.
+
+Si elle n'est pas explicitement présente :
+=> null
+
+13. images
+
+Récupère l'URL de l'image principale de l'annonce immobilière.
+
+IMPORTANT :
+- Cherche l'image principale directement sur la page de l'annonce.
+- Vérifie notamment les métadonnées de la page comme og:image.
+- Tu peux également utiliser les données structurées de la page si elles contiennent l'image du bien.
+- L'image doit correspondre au bien immobilier annoncé.
+- Ne retourne PAS le logo de la plateforme.
+- Ne retourne PAS l'avatar du vendeur.
+- Ne retourne PAS une icône.
+- Ne retourne PAS une image de tracking.
+- Ne fabrique JAMAIS une URL.
+- Si aucune image fiable n'est trouvée, retourne [].
+
+La première image de la liste doit être l'image principale.
+
+Exemple :
+
+"images": [
+  "https://exemple.com/photo-appartement.jpg"
+]
+
+────────────────────────────────
+RÈGLES ABSOLUES
+────────────────────────────────
+
+Ne déduis jamais une information.
+
+Ne complète jamais une information manquante avec une valeur probable.
+
+Si l'information n'est pas explicitement présente dans l'annonce :
+=> null
+
+Pour la localisation :
+utilise uniquement la commune réelle du bien.
+
+Pour le prix :
+utilise uniquement le prix du bien principal.
+
+Pour la surface :
+utilise uniquement la surface principale du bien.
+
+Pour les chambres :
+utilise uniquement un nombre explicitement identifiable.
+
+Pour l'année :
+utilise uniquement une année explicitement identifiable.
+
+Pour les images :
+utilise uniquement une URL réellement trouvée sur la page ou dans ses métadonnées.
+
+────────────────────────────────
+FORMAT DE RÉPONSE
+────────────────────────────────
+
+Retourne UNIQUEMENT ce JSON :
+
+{
+  "title": null,
+  "price": null,
+  "typeLocal": null,
+  "rooms": null,
+  "bedrooms": null,
+  "surface": null,
+  "city": null,
+  "codePostal": null,
+  "floor": null,
+  "dpe": null,
+  "ges": null,
+  "constructionYear": null,
+  "images": []
+}
+
+Aucun markdown.
+Aucun texte avant.
+Aucun texte après.
+JSON uniquement.
+`;
+
+        try {
+            const response = await this.openAI.responses.create({
+                model: 'gpt-5-mini',
+
+                tools: [
+                    {
+                        type: 'web_search',
+                    },
+                ],
+
+                input: [
+                    {
+                        role: 'system',
+                        content:
+                            'Tu es un extracteur de données immobilières françaises. Tu dois utiliser la recherche Web pour ouvrir l’URL fournie et extraire uniquement les informations explicitement présentes dans l’annonce, y compris l’image principale si elle est accessible.',
+                    },
+                    {
+                        role: 'user',
+                        content: prompt,
+                    },
+                ],
+            });
+
+            const content = response.output_text;
+
+            this.logger.log(`🤖 OPENAI RAW RESULT → ${content}`);
+
+            if (!content) {
+                this.logger.warn(`⚠️ OPENAI → aucune donnée retournée pour ${input.url}`);
+
+                return {
+                    source: 'openai',
+                    url: input.url,
+                    images: [],
+                };
+            }
+
+            const result = JSON.parse(content);
+
+            this.logger.log(`🤖 OPENAI EXTRACTED → ${JSON.stringify(result, null, 2)}`);
+
+            const metadata: ListingMetadata = {
+                source: 'openai',
+                url: input.url,
+
+                title: typeof result.title === 'string' ? result.title : undefined,
+
+                price: typeof result.price === 'number' ? result.price : undefined,
+
+                typeLocal: result.typeLocal ?? undefined,
+
+                rooms: typeof result.rooms === 'number' ? result.rooms : undefined,
+
+                bedrooms: typeof result.bedrooms === 'number' ? result.bedrooms : undefined,
+
+                surface: typeof result.surface === 'number' ? result.surface : undefined,
+
+                city: typeof result.city === 'string' ? this.normalizeCity(result.city) : undefined,
+
+                codePostal: typeof result.codePostal === 'string' ? result.codePostal : undefined,
+
+                floor: typeof result.floor === 'number' ? result.floor : result.floor === null ? null : undefined,
+
+                dpe: typeof result.dpe === 'string' ? result.dpe : undefined,
+
+                ges: typeof result.ges === 'string' ? result.ges : undefined,
+
+                constructionYear: typeof result.constructionYear === 'number' ? result.constructionYear : undefined,
+
+                images: Array.isArray(result.images)
+                    ? result.images.filter(
+                          (image: unknown): image is string => typeof image === 'string' && image.startsWith('http'),
+                      )
+                    : [],
+            };
+
+            this.logger.log(`🖼️ OPENAI IMAGE → ${JSON.stringify(metadata.images)}`);
+
+            this.logger.log(`🏠 OPENAI FINAL METADATA → ${JSON.stringify(metadata, null, 2)}`);
+
+            return metadata;
+        } catch (error) {
+            this.logger.error(
+                `❌ OPENAI WEB EXTRACTION FAILED → ${input.url}`,
+                error instanceof Error ? error.message : error,
+            );
+
+            return {
+                source: 'openai',
+                url: input.url,
+                images: [],
+            };
+        }
+    }
+
     async verifyExtractedMetadata(input: {
         url?: string;
         title: string;
@@ -2329,8 +2714,7 @@ export class OpenaiService {
           `;
 
         const response = await this.openAI.chat.completions.create({
-            model: 'gpt-4.1-mini',
-            temperature: 0,
+            model: 'gpt-5-mini',
             response_format: {
                 type: 'json_object',
             },

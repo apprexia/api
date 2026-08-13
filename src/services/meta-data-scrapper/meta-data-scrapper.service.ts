@@ -27,7 +27,7 @@ export interface VerifyExtractedMetadataResult {
 }
 
 export interface ListingMetadata {
-    source: 'html' | 'playwright' | 'linkpreview' | 'manual';
+    source: 'html' | 'playwright' | 'openai' | 'manual';
 
     url?: string;
 
@@ -48,7 +48,8 @@ export interface ListingMetadata {
     rooms?: number;
     terrain?: number;
     floor?: number | null;
-
+    bedrooms?: number;
+    constructionYear?: number;
     condition?: string;
     dpe?: string;
     ges?: string;
@@ -91,7 +92,6 @@ type AnalysisDevice = 'mobile' | 'desktop';
 @Injectable()
 export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(MetadataScraperService.name);
-    private readonly linkPreviewDomains = ['leboncoin.fr', 'seloger.com', 'logic-immo.com'];
 
     constructor(
         private readonly prisma: PrismaService,
@@ -114,44 +114,86 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    async scrape(
-        url: string,
-        device: AnalysisDevice = 'desktop',
-        linkPreview?: {
-            title?: string;
-            description?: string;
-            image?: string;
-            url?: string;
-        },
-    ): Promise<ListingMetadata> {
+    async scrape(url: string, device: AnalysisDevice = 'desktop'): Promise<ListingMetadata> {
         const normalizedUrl = this.normalizeUrl(url);
+        const platform = this.getRealEstatePlatform(normalizedUrl);
 
         this.logger.log(`URL originale : ${url}`);
         this.logger.log(`URL utilisée scraping : ${normalizedUrl}`);
         this.logger.log(`📱 Device analyse : ${device}`);
-        this.logger.log(`🔗 LinkPreview reçu depuis le front`, linkPreview);
+        this.logger.log(`🏠 Plateforme détectée : ${platform ?? 'autre'}`);
 
         // =====================================================
-        // 1. LINKPREVIEW FOURNI PAR LE FRONT
+        // 1. SELOGER / LEBONCOIN / LOGIC-IMMO
+        //    → OPENAI EN PRIORITÉ
+        //    → PLAYWRIGHT EN FALLBACK
         // =====================================================
 
-        if (linkPreview) {
-            this.logger.log(`🔗 LinkPreview reçu depuis le front`);
+        if (platform === 'seloger' || platform === 'leboncoin' || platform === 'logic-immo') {
+            // -------------------------------------------------
+            // OPENAI
+            // -------------------------------------------------
 
-            return {
-                source: 'html',
-                url: normalizedUrl,
-                title: linkPreview.title,
-                description: linkPreview.description,
-                images: linkPreview.image ? [linkPreview.image] : [],
-            };
+            try {
+                this.logger.log(`🤖 ${platform.toUpperCase()} → tentative OpenAI`);
+
+                const openAiResult = await this.scrapeWithOpenAI(normalizedUrl, platform);
+
+                if (this.isValidResult(openAiResult)) {
+                    this.logger.log(`✅ ${platform.toUpperCase()} → OpenAI réussi`);
+
+                    return {
+                        ...openAiResult,
+                        source: 'openai',
+                        url: normalizedUrl,
+                    };
+                }
+
+                this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI résultat insuffisant`);
+            } catch (error) {
+                this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI échoué`);
+
+                if (error instanceof Error) {
+                    this.logger.warn(error.message);
+                }
+            }
+
+            // -------------------------------------------------
+            // PLAYWRIGHT FALLBACK
+            // -------------------------------------------------
+
+            try {
+                this.logger.warn(`🎭 ${platform.toUpperCase()} → fallback Playwright`);
+
+                const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl);
+
+                if (this.isValidResult(playwrightResult)) {
+                    this.logger.log(`✅ ${platform.toUpperCase()} → Playwright réussi`);
+
+                    return {
+                        ...playwrightResult,
+                        source: 'playwright',
+                        url: normalizedUrl,
+                    };
+                }
+
+                this.logger.warn(`⚠️ ${platform.toUpperCase()} → Playwright résultat insuffisant`);
+            } catch (error) {
+                this.logger.warn(`❌ ${platform.toUpperCase()} → Playwright échoué`);
+
+                if (error instanceof Error) {
+                    this.logger.warn(error.message);
+                }
+            }
+
+            throw new Error(`Impossible d'extraire les métadonnées de ${platform}`);
         }
 
-        try {
-            // =================================================
-            // 2. SCRAPING HTML CLASSIQUE
-            // =================================================
+        // =====================================================
+        // 2. AUTRES SITES → AXIOS / CHEERIO
+        // =====================================================
 
+        try {
             const htmlResult = await this.scrapeHtml(normalizedUrl);
 
             if (this.isValidResult(htmlResult)) {
@@ -159,36 +201,66 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
 
                 return {
                     ...htmlResult,
-                    source: 'html' as const,
+                    source: 'html',
+                    url: normalizedUrl,
                 };
             }
 
-            // =================================================
-            // 3. FALLBACK SELON TON CODE ACTUEL
-            // =================================================
-
-            if (device === 'mobile') {
-                this.logger.log(`📱 Métadonnées insuffisantes → fallback LinkPreview`);
-
-                return await this.scrapeWithLinkPreview(normalizedUrl);
-            }
-
-            this.logger.log(`🖥️ Métadonnées insuffisantes → fallback Playwright`);
-
-            return await this.scrapeWithPlaywright(normalizedUrl);
+            this.logger.warn(`⚠️ Axios/Cheerio → métadonnées insuffisantes`);
         } catch (error) {
-            console.error('SCRAPING ERROR', error);
+            this.logger.warn(`⚠️ Axios/Cheerio → erreur`);
 
-            if (device === 'mobile') {
-                this.logger.warn(`📱 Erreur Axios/Cheerio → fallback LinkPreview`);
+            if (error instanceof Error) {
+                this.logger.warn(error.message);
+            }
+        }
 
-                return await this.scrapeWithLinkPreview(normalizedUrl);
+        // =====================================================
+        // 3. AUTRES SITES → PLAYWRIGHT
+        // =====================================================
+
+        try {
+            this.logger.log(`🎭 Tentative de récupération avec Playwright`);
+
+            const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl);
+
+            if (this.isValidResult(playwrightResult)) {
+                this.logger.log(`✅ Métadonnées récupérées avec Playwright`);
+
+                return {
+                    ...playwrightResult,
+                    source: 'playwright',
+                    url: normalizedUrl,
+                };
             }
 
-            this.logger.warn(`🖥️ Erreur Axios/Cheerio → fallback Playwright`);
+            this.logger.warn(`⚠️ Playwright → métadonnées insuffisantes`);
+        } catch (error) {
+            this.logger.warn(`⚠️ Playwright → erreur`);
 
-            return await this.scrapeWithPlaywright(normalizedUrl);
+            if (error instanceof Error) {
+                this.logger.warn(error.message);
+            }
         }
+
+        throw new Error(`Impossible d'extraire les métadonnées de cette URL`);
+    }
+
+    private async scrapeWithOpenAI(
+        url: string,
+        platform: 'seloger' | 'leboncoin' | 'logic-immo',
+    ): Promise<ListingMetadata> {
+        this.logger.log(`🤖 OPENAI SCRAPING → ${platform}`);
+
+        const response = await this.openAiService.extractListingMetadata({
+            url,
+        });
+
+        return {
+            ...response,
+            source: 'openai',
+            url,
+        };
     }
 
     private cleanUrl(rawUrl: string): string {
@@ -203,28 +275,20 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         //    [https://example.com](https://example.com)
         // =====================================================
 
-        const markdownMatch = value.match(
-          /\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/i,
-        );
+        const markdownMatch = value.match(/\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/i);
 
         if (markdownMatch?.[1]) {
-            return markdownMatch[1]
-              .replace(/[)\]}>,]+$/, '')
-              .trim();
+            return markdownMatch[1].replace(/[)\]}>,]+$/, '').trim();
         }
 
         // =====================================================
         // 2. Cherche une URL HTTP/HTTPS dans un texte
         // =====================================================
 
-        const urlMatch = value.match(
-          /https?:\/\/[^\s<>"'\])}]+/i,
-        );
+        const urlMatch = value.match(/https?:\/\/[^\s<>"'\])}]+/i);
 
         if (urlMatch?.[0]) {
-            return urlMatch[0]
-              .replace(/[)\]}>,.]+$/, '')
-              .trim();
+            return urlMatch[0].replace(/[)\]}>,.]+$/, '').trim();
         }
 
         // =====================================================
@@ -273,6 +337,28 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    private getRealEstatePlatform(rawUrl: string): 'seloger' | 'leboncoin' | 'logic-immo' | null {
+        try {
+            const hostname = new URL(rawUrl).hostname.toLowerCase();
+
+            if (hostname.includes('seloger.com')) {
+                return 'seloger';
+            }
+
+            if (hostname.includes('leboncoin.fr')) {
+                return 'leboncoin';
+            }
+
+            if (hostname.includes('logic-immo.com')) {
+                return 'logic-immo';
+            }
+
+            return null;
+        } catch {
+            return null;
+        }
+    }
+
     private async scrapeHtml(url: string): Promise<Omit<ListingMetadata, 'source'>> {
         const response = await axios.get<string>(url, {
             timeout: 10000,
@@ -284,50 +370,6 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         const html: string = response.data;
 
         return this.extractMetadata(html, url);
-    }
-
-    private async scrapeWithLinkPreview(url: string): Promise<ListingMetadata> {
-        const apiKey = this.configService.get<string>('LINKPREVIEW_API_KEY');
-
-        if (!apiKey) {
-            throw new Error('LINKPREVIEW_API_KEY is not configured');
-        }
-
-        this.logger.log(`🔗 LINKPREVIEW : ${url}`);
-
-        try {
-            const response = await firstValueFrom(
-                this.httpService.get('https://api.linkpreview.net', {
-                    params: {
-                        key: apiKey,
-                        q: url,
-                    },
-                    timeout: 10000,
-                }),
-            );
-
-            const data = response.data;
-
-            this.logger.log(`🔗 LINKPREVIEW TITLE: ${data.title ?? 'N/A'}`);
-
-            this.logger.log(`🔗 LINKPREVIEW DESCRIPTION: ${data.description ?? 'N/A'}`);
-
-            this.logger.log(`🔗 LINKPREVIEW IMAGE: ${data.image ?? 'N/A'}`);
-
-            return {
-                source: 'linkpreview',
-                url,
-
-                title: data.title || undefined,
-                description: data.description || undefined,
-
-                images: data.image ? [data.image] : [],
-            };
-        } catch (error) {
-            this.logger.error(`❌ LinkPreview error pour ${url}`, error instanceof Error ? error.message : error);
-
-            throw error;
-        }
     }
 
     private async scrapeWithPlaywright(url: string): Promise<ListingMetadata> {

@@ -71,6 +71,9 @@ model Analysis {
   communeContext   Json?
   communeAnalysis  Json?
   rooms            Int?
+  bedrooms         Int?
+  floor            Int?
+  constructionYear Int?
   surface          Float?
   terrain          Float?
   score            Int?

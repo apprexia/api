@@ -66,11 +66,7 @@ export class AnalysesService {
         });
 
         try {
-            const metadata = await this.metadataScraperService.scrape(
-                dto.url,
-                dto.device ?? 'desktop',
-                dto.linkPreview,
-            );
+            const metadata = await this.metadataScraperService.scrape(dto.url);
 
             void this.processAnalysis(analysis.id, metadata);
         } catch (error) {
@@ -397,6 +393,9 @@ export class AnalysesService {
                 codePostal: this.normalizeCodePostal(metadata.codePostal),
                 typeLocal: metadata.typeLocal,
                 rooms: aiResult.rooms,
+                bedrooms: metadata.bedrooms ?? null,
+                constructionYear: metadata.constructionYear ?? null,
+                floor: metadata.floor ?? null,
                 dpe: metadata.dpe ?? null,
                 ges: metadata.ges ?? null,
                 surface: aiResult.surface,
