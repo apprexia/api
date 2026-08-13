@@ -17,32 +17,29 @@ import { RentalMarketModule } from './rental-market/rental-market.module';
 import { ReportService } from './report/report.service';
 import { ReportModule } from './report/report.module';
 import { HttpModule } from '@nestjs/axios';
-import { LocationProviderService } from './apprexia-engine/providers/location-provider/location-provider.service';
 import { CommuneIndicatorModule } from './commune-indicator/commune-indicator.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [
-    PrismaModule,
-    HttpModule,
-    UsersModule,
-    AuthModule,
-    AnalysesModule,
-    FavoritesModule,
-    CreditsModule,
-    StripeModule,
-    DvfModule,
-    ApprexiaEngineModule,
-    RentalMarketModule,
-    ReportModule,
-    CommuneIndicatorModule,
-  ],
-  controllers: [AppController],
-  providers: [
-    AppService,
-    AnalysesAiService,
-    OpenaiService,
-    AnalysisMarketService,
-    ReportService,
-  ],
+    imports: [
+        PrismaModule,
+        HttpModule,
+        UsersModule,
+        AuthModule,
+        AnalysesModule,
+        FavoritesModule,
+        CreditsModule,
+        StripeModule,
+        DvfModule,
+        ApprexiaEngineModule,
+        RentalMarketModule,
+        ReportModule,
+        CommuneIndicatorModule,
+        ConfigModule.forRoot({
+            isGlobal: true,
+        }),
+    ],
+    controllers: [AppController],
+    providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService, ReportService],
 })
 export class AppModule {}

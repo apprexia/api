@@ -66,7 +66,12 @@ export class AnalysesService {
         });
 
         try {
-            const metadata = await this.metadataScraperService.scrape(dto.url);
+            const metadata = await this.metadataScraperService.scrape(
+                dto.url,
+                dto.device ?? 'desktop',
+                dto.linkPreview,
+            );
+
             void this.processAnalysis(analysis.id, metadata);
         } catch (error) {
             console.error(error);

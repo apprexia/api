@@ -1,11 +1,14 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { BrowserContext, chromium } from 'playwright';
 import { CheerioAPI } from 'cheerio';
+import { chromium } from 'playwright';
 import { PropertyFeatures } from './interfaces/property-features.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenaiService } from '../openai/openai.service';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { firstValueFrom } from 'rxjs';
 
 interface SchemaAddress {
     streetAddress?: string;
@@ -24,16 +27,13 @@ export interface VerifyExtractedMetadataResult {
 }
 
 export interface ListingMetadata {
-    // Origine
-    source: 'html' | 'playwright' | 'manual';
+    source: 'html' | 'playwright' | 'linkpreview' | 'manual';
 
     url?: string;
 
-    // Informations générales
     title?: string;
     description?: string;
 
-    // Localisation (SOURCE BRUTE)
     address?: string;
     streetAddress?: string;
     city?: string;
@@ -42,7 +42,6 @@ export interface ListingMetadata {
     latitude?: number;
     longitude?: number;
 
-    // Bien
     typeLocal?: 'Maison' | 'Appartement' | 'Terrain' | 'Local commercial' | 'Parking' | 'Immeuble' | 'Inconnu';
 
     surface?: number;
@@ -57,10 +56,9 @@ export interface ListingMetadata {
     propertyFeatures?: PropertyFeatures;
     featureLabels?: string[];
 
-    // Prix
     price?: number;
     currency?: string;
-    // Médias
+
     images?: string[];
 }
 
@@ -88,9 +86,19 @@ interface ListingSchema {
     priceCurrency?: string;
 }
 
+type AnalysisDevice = 'mobile' | 'desktop';
+
 @Injectable()
 export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(MetadataScraperService.name);
+    private readonly linkPreviewDomains = ['leboncoin.fr', 'seloger.com', 'logic-immo.com'];
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly openAiService: OpenaiService,
+        private readonly httpService: HttpService,
+        private readonly configService: ConfigService,
+    ) {}
 
     private cleanUrl(rawUrl: string): string {
         if (!rawUrl) {
@@ -160,11 +168,6 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
 
     private browser;
 
-    constructor(
-        private readonly prisma: PrismaService,
-        private readonly openAiService: OpenaiService,
-    ) {}
-
     async onModuleInit() {
         // this.browser = await chromium.launch({
         //     headless: false,
@@ -177,28 +180,77 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    async scrape(url: string): Promise<ListingMetadata> {
+    async scrape(
+        url: string,
+        device: AnalysisDevice = 'desktop',
+        linkPreview?: {
+            title?: string;
+            description?: string;
+            image?: string;
+            url?: string;
+        },
+    ): Promise<ListingMetadata> {
         const normalizedUrl = this.normalizeUrl(url);
 
         this.logger.log(`URL originale : ${url}`);
         this.logger.log(`URL utilisée scraping : ${normalizedUrl}`);
+        this.logger.log(`📱 Device analyse : ${device}`);
+
+        // =====================================================
+        // 1. LINKPREVIEW FOURNI PAR LE FRONT
+        // =====================================================
+
+        if (linkPreview) {
+            this.logger.log(`🔗 LinkPreview reçu depuis le front`);
+
+            return {
+                source: 'html',
+                url: normalizedUrl,
+                title: linkPreview.title,
+                description: linkPreview.description,
+                images: linkPreview.image ? [linkPreview.image] : [],
+            };
+        }
 
         try {
+            // =================================================
+            // 2. SCRAPING HTML CLASSIQUE
+            // =================================================
+
             const htmlResult = await this.scrapeHtml(normalizedUrl);
+
             if (this.isValidResult(htmlResult)) {
+                this.logger.log(`✅ Métadonnées récupérées avec Axios/Cheerio`);
+
                 return {
                     ...htmlResult,
                     source: 'html' as const,
                 };
             }
 
-            this.logger.log(`Métadonnées insuffisantes, fallback Playwright: ${normalizedUrl}`);
+            // =================================================
+            // 3. FALLBACK SELON TON CODE ACTUEL
+            // =================================================
+
+            if (device === 'mobile') {
+                this.logger.log(`📱 Métadonnées insuffisantes → fallback LinkPreview`);
+
+                return await this.scrapeWithLinkPreview(normalizedUrl);
+            }
+
+            this.logger.log(`🖥️ Métadonnées insuffisantes → fallback Playwright`);
 
             return await this.scrapeWithPlaywright(normalizedUrl);
         } catch (error) {
-            console.error('AXIOS ERROR', error);
+            console.error('SCRAPING ERROR', error);
 
-            this.logger.warn(`Erreur extraction HTML, fallback Playwright: ${normalizedUrl}`);
+            if (device === 'mobile') {
+                this.logger.warn(`📱 Erreur Axios/Cheerio → fallback LinkPreview`);
+
+                return await this.scrapeWithLinkPreview(normalizedUrl);
+            }
+
+            this.logger.warn(`🖥️ Erreur Axios/Cheerio → fallback Playwright`);
 
             return await this.scrapeWithPlaywright(normalizedUrl);
         }
@@ -215,6 +267,50 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         const html: string = response.data;
 
         return this.extractMetadata(html, url);
+    }
+
+    private async scrapeWithLinkPreview(url: string): Promise<ListingMetadata> {
+        const apiKey = this.configService.get<string>('LINKPREVIEW_API_KEY');
+
+        if (!apiKey) {
+            throw new Error('LINKPREVIEW_API_KEY is not configured');
+        }
+
+        this.logger.log(`🔗 LINKPREVIEW : ${url}`);
+
+        try {
+            const response = await firstValueFrom(
+                this.httpService.get('https://api.linkpreview.net', {
+                    params: {
+                        key: apiKey,
+                        q: url,
+                    },
+                    timeout: 10000,
+                }),
+            );
+
+            const data = response.data;
+
+            this.logger.log(`🔗 LINKPREVIEW TITLE: ${data.title ?? 'N/A'}`);
+
+            this.logger.log(`🔗 LINKPREVIEW DESCRIPTION: ${data.description ?? 'N/A'}`);
+
+            this.logger.log(`🔗 LINKPREVIEW IMAGE: ${data.image ?? 'N/A'}`);
+
+            return {
+                source: 'linkpreview',
+                url,
+
+                title: data.title || undefined,
+                description: data.description || undefined,
+
+                images: data.image ? [data.image] : [],
+            };
+        } catch (error) {
+            this.logger.error(`❌ LinkPreview error pour ${url}`, error instanceof Error ? error.message : error);
+
+            throw error;
+        }
     }
 
     private async scrapeWithPlaywright(url: string): Promise<ListingMetadata> {

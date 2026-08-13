@@ -12,25 +12,20 @@ import { ApprexiaEngineModule } from '../apprexia-engine/apprexia-engine.module'
 import { RentalEngineService } from '../apprexia-engine/engines/rental-engine/rental-engine.service';
 import { RentalMarketModule } from '../rental-market/rental-market.module';
 import { CommuneIndicatorService } from '../commune-indicator/commune-indicator.service';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
-  imports: [
-    UsersModule,
-    CreditsModule,
-    DvfModule,
-    ApprexiaEngineModule,
-    RentalMarketModule,
-  ],
-  controllers: [AnalysesController],
-  providers: [
-    AnalysesService,
-    AnalysesAiService,
-    OpenaiService,
-    MetadataScraperService,
-    AnalysisMarketService,
-    RentalEngineService,
-    CommuneIndicatorService,
-  ],
-  exports: [AnalysesService],
+    imports: [HttpModule, UsersModule, CreditsModule, DvfModule, ApprexiaEngineModule, RentalMarketModule],
+    controllers: [AnalysesController],
+    providers: [
+        AnalysesService,
+        AnalysesAiService,
+        OpenaiService,
+        MetadataScraperService,
+        AnalysisMarketService,
+        RentalEngineService,
+        CommuneIndicatorService,
+    ],
+    exports: [AnalysesService],
 })
 export class AnalysesModule {}
