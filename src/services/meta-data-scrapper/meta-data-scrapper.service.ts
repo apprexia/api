@@ -165,7 +165,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             try {
                 this.logger.warn(`🎭 ${platform.toUpperCase()} → fallback Playwright`);
 
-                const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl);
+                const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
 
                 if (this.isValidResult(playwrightResult)) {
                     this.logger.log(`✅ ${platform.toUpperCase()} → Playwright réussi`);
@@ -372,8 +372,8 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         return this.extractMetadata(html, url);
     }
 
-    private async scrapeWithPlaywright(url: string): Promise<ListingMetadata> {
-        const browser = await this.getBrowser();
+    private async scrapeWithPlaywright(url: string, device: string): Promise<ListingMetadata> {
+        const browser = await this.getBrowser(device);
 
         const context = await browser.newContext({
             userAgent:
@@ -803,12 +803,13 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         return null;
     }
 
-    private async getBrowser() {
+    private async getBrowser(device: string) {
         if (!this.browser || !this.browser.isConnected()) {
             this.logger.log('🚀 Launch Chromium');
+            this.logger.log(`📱 Device analyse : ${device}`);
 
             this.browser = await chromium.launch({
-                headless: false,
+                headless: device === 'desktop' ? false : true,
                 args: ['--disable-blink-features=AutomationControlled'],
             });
         }
