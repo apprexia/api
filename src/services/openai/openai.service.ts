@@ -1643,391 +1643,6 @@ export class OpenaiService {
         };
     }
 
-    async extractListingMetadata(input: { url: string }): Promise<ListingMetadata> {
-        const url = input.url.toLowerCase();
-
-        const supportedSources = ['seloger.com', 'leboncoin.fr', 'logic-immo.com'];
-
-        const isSupportedSource = supportedSources.some((domain) => url.includes(domain));
-
-        if (!isSupportedSource) {
-            throw new Error(`OpenAI listing extraction not supported for URL: ${input.url}`);
-        }
-
-        this.logger.log(`🤖 OPENAI WEB SCRAPING → ${input.url}`);
-
-        const prompt = `
-Tu es un expert français spécialisé dans l'extraction de données immobilières.
-
-Tu dois ouvrir et analyser directement cette annonce immobilière :
-
-${input.url}
-
-IMPORTANT :
-- Utilise la recherche Web pour ouvrir l'URL fournie.
-- Lis directement la page de l'annonce.
-- Ne te contente pas de rechercher l'URL sur Google.
-- Essaie d'ouvrir la page de l'annonce elle-même.
-- Si plusieurs résultats correspondent à l'annonce, privilégie toujours l'URL fournie.
-- Tu dois uniquement utiliser des informations explicitement présentes dans l'annonce.
-- Tu ne dois JAMAIS inventer une information.
-- Si une information est introuvable : null.
-
-────────────────────────────────
-INFORMATIONS À EXTRAIRE
-────────────────────────────────
-
-1. title
-Titre exact de l'annonce.
-
-2. price
-Prix du bien principal en nombre.
-
-Exemple :
-"376 000 €" => 376000
-
-3. typeLocal
-
-Valeurs autorisées :
-- Maison
-- Appartement
-- Terrain
-- Local commercial
-- Parking
-- Immeuble
-- Inconnu
-
-Normalisation :
-
-Studio, T1, T2, T3, T4, F1, F2, F3, loft habitable
-=> Appartement
-
-Maison, villa, pavillon, maison individuelle
-=> Maison
-
-Terrain, parcelle, terrain constructible
-=> Terrain
-
-Parking, box ou garage vendu seul
-=> Parking
-
-Local commercial, boutique, commerce
-=> Local commercial
-
-Immeuble entier
-=> Immeuble
-
-4. rooms
-
-Nombre de pièces principales.
-
-Exemples :
-Studio => 1
-T2 => 2
-T3 => 3
-T4 => 4
-
-Ne compte pas :
-- salle de bain
-- WC
-- couloir
-- dressing
-
-5. bedrooms
-
-Nombre de chambres.
-
-Exemple :
-"T4 avec 3 chambres" => 3
-
-Ne déduis jamais le nombre de chambres uniquement à partir du nombre de pièces.
-
-6. surface
-
-Surface principale du bien en m².
-
-Ne prends pas :
-- terrasse
-- balcon
-- jardin
-- terrain
-- cave
-- garage
-- parking
-
-Exemple :
-"Appartement 77 m² avec terrasse 39 m²"
-=> surface = 77
-
-7. city
-
-Commune dans laquelle se situe réellement le bien.
-
-Une ville simplement mentionnée comme :
-- proche de Paris
-- à 10 minutes de Versailles
-- à proximité de Lyon
-
-ne doit PAS être utilisée.
-
-Normalise la ville en MAJUSCULES.
-
-Exemple :
-Chessy => CHESSY
-Bussy-Saint-Georges => BUSSY-SAINT-GEORGES
-
-8. codePostal
-
-Code postal de la commune du bien.
-
-9. floor
-
-Étage du bien.
-
-Normalisation obligatoire :
-
-RDC
-=> 0
-
-Rez-de-chaussée
-=> 0
-
-1er étage
-=> 1
-
-1er
-=> 1
-
-2ème étage
-=> 2
-
-3ème étage
-=> 3
-
-etc.
-
-Si l'étage est inconnu :
-=> null
-
-IMPORTANT :
-"RDC/2" signifie :
-floor = 0
-
-Le "/2" signifie que l'immeuble possède 2 étages et ne doit pas être utilisé comme étage du bien.
-
-10. dpe
-
-Classe énergétique A à G.
-
-Exemples :
-"DPE : C" => "C"
-"Classe énergie C" => "C"
-
-Ne déduis jamais le DPE.
-
-11. ges
-
-Classe GES A à G.
-
-Exemples :
-"GES : C" => "C"
-"Classe climat C" => "C"
-
-Ne déduis jamais le GES.
-
-12. constructionYear
-
-Année de construction du bien.
-
-Exemples :
-"Construit en 2017" => 2017
-"Année de construction : 2017" => 2017
-
-Ne déduis jamais l'année de construction à partir :
-- de l'état du bâtiment ;
-- du DPE ;
-- de l'apparence ;
-- de l'année de rénovation.
-
-Si elle n'est pas explicitement présente :
-=> null
-
-13. images
-
-Récupère l'URL de l'image principale de l'annonce immobilière.
-
-IMPORTANT :
-- Cherche l'image principale directement sur la page de l'annonce.
-- Vérifie notamment les métadonnées de la page comme og:image.
-- Tu peux également utiliser les données structurées de la page si elles contiennent l'image du bien.
-- L'image doit correspondre au bien immobilier annoncé.
-- Ne retourne PAS le logo de la plateforme.
-- Ne retourne PAS l'avatar du vendeur.
-- Ne retourne PAS une icône.
-- Ne retourne PAS une image de tracking.
-- Ne fabrique JAMAIS une URL.
-- Si aucune image fiable n'est trouvée, retourne [].
-
-La première image de la liste doit être l'image principale.
-
-Exemple :
-
-"images": [
-  "https://exemple.com/photo-appartement.jpg"
-]
-
-────────────────────────────────
-RÈGLES ABSOLUES
-────────────────────────────────
-
-Ne déduis jamais une information.
-
-Ne complète jamais une information manquante avec une valeur probable.
-
-Si l'information n'est pas explicitement présente dans l'annonce :
-=> null
-
-Pour la localisation :
-utilise uniquement la commune réelle du bien.
-
-Pour le prix :
-utilise uniquement le prix du bien principal.
-
-Pour la surface :
-utilise uniquement la surface principale du bien.
-
-Pour les chambres :
-utilise uniquement un nombre explicitement identifiable.
-
-Pour l'année :
-utilise uniquement une année explicitement identifiable.
-
-Pour les images :
-utilise uniquement une URL réellement trouvée sur la page ou dans ses métadonnées.
-
-────────────────────────────────
-FORMAT DE RÉPONSE
-────────────────────────────────
-
-Retourne UNIQUEMENT ce JSON :
-
-{
-  "title": null,
-  "price": null,
-  "typeLocal": null,
-  "rooms": null,
-  "bedrooms": null,
-  "surface": null,
-  "city": null,
-  "codePostal": null,
-  "floor": null,
-  "dpe": null,
-  "ges": null,
-  "constructionYear": null,
-  "images": []
-}
-
-Aucun markdown.
-Aucun texte avant.
-Aucun texte après.
-JSON uniquement.
-`;
-
-        try {
-            const response = await this.openAI.responses.create({
-                model: 'gpt-5-mini',
-
-                tools: [
-                    {
-                        type: 'web_search',
-                    },
-                ],
-
-                input: [
-                    {
-                        role: 'system',
-                        content:
-                            'Tu es un extracteur de données immobilières françaises. Tu dois utiliser la recherche Web pour ouvrir l’URL fournie et extraire uniquement les informations explicitement présentes dans l’annonce, y compris l’image principale si elle est accessible.',
-                    },
-                    {
-                        role: 'user',
-                        content: prompt,
-                    },
-                ],
-            });
-
-            const content = response.output_text;
-
-            this.logger.log(`🤖 OPENAI RAW RESULT → ${content}`);
-
-            if (!content) {
-                this.logger.warn(`⚠️ OPENAI → aucune donnée retournée pour ${input.url}`);
-
-                return {
-                    source: 'openai',
-                    url: input.url,
-                    images: [],
-                };
-            }
-
-            const result = JSON.parse(content);
-
-            this.logger.log(`🤖 OPENAI EXTRACTED → ${JSON.stringify(result, null, 2)}`);
-
-            const metadata: ListingMetadata = {
-                source: 'openai',
-                url: input.url,
-
-                title: typeof result.title === 'string' ? result.title : undefined,
-
-                price: typeof result.price === 'number' ? result.price : undefined,
-
-                typeLocal: result.typeLocal ?? undefined,
-
-                rooms: typeof result.rooms === 'number' ? result.rooms : undefined,
-
-                bedrooms: typeof result.bedrooms === 'number' ? result.bedrooms : undefined,
-
-                surface: typeof result.surface === 'number' ? result.surface : undefined,
-
-                city: typeof result.city === 'string' ? this.normalizeCity(result.city) : undefined,
-
-                codePostal: typeof result.codePostal === 'string' ? result.codePostal : undefined,
-
-                floor: typeof result.floor === 'number' ? result.floor : result.floor === null ? null : undefined,
-
-                dpe: typeof result.dpe === 'string' ? result.dpe : undefined,
-
-                ges: typeof result.ges === 'string' ? result.ges : undefined,
-
-                constructionYear: typeof result.constructionYear === 'number' ? result.constructionYear : undefined,
-
-                images: Array.isArray(result.images)
-                    ? result.images.filter(
-                          (image: unknown): image is string => typeof image === 'string' && image.startsWith('http'),
-                      )
-                    : [],
-            };
-
-            this.logger.log(`🖼️ OPENAI IMAGE → ${JSON.stringify(metadata.images)}`);
-
-            this.logger.log(`🏠 OPENAI FINAL METADATA → ${JSON.stringify(metadata, null, 2)}`);
-
-            return metadata;
-        } catch (error) {
-            this.logger.error(
-                `❌ OPENAI WEB EXTRACTION FAILED → ${input.url}`,
-                error instanceof Error ? error.message : error,
-            );
-
-            return {
-                source: 'openai',
-                url: input.url,
-                images: [],
-            };
-        }
-    }
-
     async verifyExtractedMetadata(input: {
         url?: string;
         title: string;
@@ -2089,264 +1704,185 @@ JSON uniquement.
             5. ne jamais inventer une information absente.
         
         ════════════════════════════════════
-            PRIORITÉ ABSOLUE : DPE ET GES
-        ════════════════════════════════════
-        
-            La vérification du DPE et du GES est une priorité absolue.
-        
-            Tu dois rechercher activement le DPE et le GES dans :
-        
-              1. le titre ;
-            2. la description ;
-            3. le contenu complet de l'annonce ;
-            4. les données extraites automatiquement.
-        
-            Tu dois extraire le DPE et le GES lorsqu'une classe énergétique
-            ou une classe d'émission est explicitement identifiable.
-        
-            DPE = performance énergétique du logement.
-        
-            GES = émissions de gaz à effet de serre / classe climat.
-        
-            Les deux valeurs sont totalement indépendantes.
-        
-            Valeurs autorisées :
-        
-              A
-            B
-            C
-            D
-            E
-            F
-            G
-        
-            IMPORTANT :
-        
-              Ne jamais déduire le DPE.
-        
-            Ne jamais déduire le GES.
-        
-            Ne jamais calculer une classe à partir :
-        
-        - du chauffage ;
-        - de l'énergie utilisée ;
-        - de l'année de construction ;
-        - de l'isolation ;
-        - de la consommation ;
-        - des émissions ;
-        - du type de logement ;
-        - d'une autre classe énergétique.
-        
-        ──────────────────────────────
-            DPE
-        ──────────────────────────────
-        
-            Si une classe A-G est explicitement associée au DPE,
-            retourne cette classe.
-        
-            Exemples :
-        
-              "DPE : D"
-        => dpe = "D"
-        
-            "Classe énergie : D"
-        => dpe = "D"
-        
-            "Classe énergétique D"
-        => dpe = "D"
-        
-            "Performance énergétique : D"
-        => dpe = "D"
-        
-        ──────────────────────────────
-            GES
-        ──────────────────────────────
-        
-            Si une classe A-G est explicitement associée au GES,
-            retourne cette classe.
-        
-            Exemples :
-        
-              "GES : B"
-        => ges = "B"
-        
-            "Classe climat : B"
-        => ges = "B"
-        
-            "Émissions de gaz à effet de serre : B"
-        => ges = "B"
-        
-        ──────────────────────────────
-            DPE ET GES SIMULTANÉS
-        ──────────────────────────────
-        
-            Si l'annonce indique :
-        
-            "DPE : D / GES : B"
-        
-            alors :
-        
-              dpe = "D"
-            ges = "B"
-        
-            Si l'annonce indique :
-        
-            "Classe énergie D"
-            "Classe climat B"
-        
-            alors :
-        
-              dpe = "D"
-            ges = "B"
-        
-            Ne jamais inverser les deux valeurs.
-        
-            Ne jamais utiliser le DPE pour renseigner le GES.
-        
-            Ne jamais utiliser le GES pour renseigner le DPE.
-            
-            ════════════════════════════════════
-        RÈGLE CRITIQUE DE DÉSAMBIGUÏSATION DPE / GES
-        ════════════════════════════════════
-        
-        Une classe A-G ne doit être attribuée au DPE ou au GES
-        QUE SI la classe est explicitement reliée au bon indicateur
-        dans le même contexte sémantique.
-        
-        La simple proximité entre une lettre A-G et les mots
-        "DPE", "GES", "énergie", "émissions", "kWh" ou "CO₂"
-        NE constitue PAS une preuve suffisante.
-        
-        IMPORTANT :
-        
-        Ne jamais supposer que :
-        
-        * la première classe A-G trouvée = DPE ;
-        * la deuxième classe A-G trouvée = GES ;
-        * une classe trouvée dans un bloc énergétique = DPE ;
-        * une classe trouvée dans un autre bloc énergétique = GES.
-        
-        Chaque classe doit être validée individuellement.
-        
-        Exemple :
-        
-        "DPE : D"
-        "GES : B"
-        
-        => dpe = "D"
-        => ges = "B"
-        
-        Exemple :
-        
-        "Classe énergie : D"
-        "Classe climat : B"
-        
-        => dpe = "D"
-        => ges = "B"
-        
-        Exemple :
-        
-        "Consommation : 206 kWh/m²/an"
-        "Émissions : 7 kg CO₂/m²/an"
-        
-        Sans classe A-G explicitement indiquée :
-        
-        => dpe = null
-        => ges = null
-        
-        Ne jamais transformer les valeurs numériques de consommation
-        ou d'émissions en classes A-G.
-        
-        Exemple interdit :
-        
-        "206 kWh/m²/an" + "7 kg CO₂/m²/an"
-        
-        => NE PAS déduire DPE = D ou GES = B.
-        
-        Si une seule classe est explicitement identifiable :
-        
-        "DPE : D"
-        mais aucune classe GES identifiable
-        
-        => dpe = "D"
-        => ges = null
-        
-        Inversement :
-        
-        "GES : B"
-        mais aucun DPE identifiable
-        
-        => dpe = null
-        => ges = "B"
-        
-        Si le contexte ne permet pas de déterminer avec certitude
-        si une classe correspond au DPE ou au GES :
-        
-        => ne pas attribuer cette classe.
-        
-        Dans ce cas, conserver la valeur automatiquement extraite
-        uniquement si celle-ci est cohérente et explicitement identifiable.
-        Sinon retourner null.
-        
-        Il est préférable de retourner null plutôt que d'associer
-        une classe au mauvais indicateur.
-        
-        
-        ──────────────────────────────
-            ABSENCE DE DPE / GES
-        ──────────────────────────────
-        
-            Si aucune classe DPE A-G n'est explicitement identifiable :
-        
-        - si la valeur extraite automatiquement existe déjà et reste cohérente,
-            conserve-la ;
-        - sinon retourne null.
-        
-            Si aucune classe GES A-G n'est explicitement identifiable :
-        
-        - si la valeur extraite automatiquement existe déjà et reste cohérente,
-            conserve-la ;
-        - sinon retourne null.
-        
-            Ne transforme jamais :
-        
-              "DPE en cours"
-            "DPE à réaliser"
-            "DPE vierge"
-            "DPE non communiqué"
-            "DPE inconnu"
-        
-            en classe A-G.
-        
-            Même règle pour le GES.
-        
-            Les valeurs telles que :
-        
-              "180 kWh/m²/an"
-            "6 kg CO₂/m²/an"
-        
-            ne doivent PAS être transformées en classe A-G si aucune classe
-            n'est explicitement indiquée.
-        
-        ──────────────────────────────
-            IMPORTANT
-        ──────────────────────────────
-        
-            Si plusieurs DPE ou GES apparaissent dans l'annonce :
-        
-        - privilégie celui explicitement associé au bien vendu ;
-        - ignore les exemples ;
-        - ignore les autres logements ;
-        - ignore les références générales de l'immeuble ;
-        - ignore les informations concernant un autre bien.
-        
+PRIORITÉ ABSOLUE — DPE / GES
+════════════════════════════════════
+
+Le DPE et le GES doivent être vérifiés indépendamment.
+
+Les données extraites automatiquement sont uniquement des HYPOTHÈSES.
+Elles ne constituent jamais une preuve.
+
+SOURCE DE VÉRITÉ :
+- titre
+- description
+- contenu complet de l'annonce
+
+DONNÉES AUTOMATIQUES :
+elles peuvent être utilisées comme indice mais ne doivent jamais
+être considérées comme une preuve lorsqu'elles contredisent le contenu
+de l'annonce.
+
+────────────────────────────
+DPE
+────────────────────────────
+
+Retourne une valeur A, B, C, D, E, F ou G UNIQUEMENT si une classe
+est explicitement associée à la performance énergétique du bien.
+
+Exemples valides :
+
+"DPE : D"
+→ dpe = "D"
+
+"Classe énergie : D"
+→ dpe = "D"
+
+"Performance énergétique : D"
+→ dpe = "D"
+
+"Consommation énergétique : classe D"
+→ dpe = "D"
+
+Exemples NON valides :
+
+"206 kWh/m²/an"
+→ aucune classe DPE déductible
+
+"bonne performance énergétique"
+→ aucune classe DPE déductible
+
+"GES : B"
+→ cela ne donne aucune information sur le DPE
+
+────────────────────────────
+GES
+────────────────────────────
+
+Retourne une valeur A, B, C, D, E, F ou G UNIQUEMENT si une classe
+est explicitement associée aux émissions de gaz à effet de serre.
+
+Exemples valides :
+
+"GES : B"
+→ ges = "B"
+
+"Classe climat : B"
+→ ges = "B"
+
+"Émissions de gaz à effet de serre : classe B"
+→ ges = "B"
+
+Exemples NON valides :
+
+"7 kg CO₂/m²/an"
+→ aucune classe GES déductible
+
+"DPE : D"
+→ cela ne donne aucune information sur le GES
+
+────────────────────────────
+RÈGLE D'INDÉPENDANCE
+────────────────────────────
+
+DPE et GES sont deux informations totalement indépendantes.
+
+Il est interdit de déduire l'un à partir de l'autre.
+
+Si l'annonce contient :
+
+"DPE : D"
+"GES : B"
+
+→ dpe = "D"
+→ ges = "B"
+
+Si l'annonce contient uniquement :
+
+"DPE : D"
+
+→ dpe = "D"
+→ ges = null
+
+Si l'annonce contient uniquement :
+
+"GES : B"
+
+→ dpe = null
+→ ges = "B"
+
+────────────────────────────
+CONFLIT AVEC L'EXTRACTION AUTOMATIQUE
+────────────────────────────
+
+Si la donnée automatique est différente de ce qui est explicitement
+indiqué dans l'annonce, la donnée de l'annonce gagne.
+
+Exemple :
+
+Donnée automatique :
+dpe = "C"
+
+Annonce :
+"DPE : D"
+
+Résultat :
+dpe = "D"
+corrected = true
+
+Autre exemple :
+
+Donnée automatique :
+ges = "C"
+
+Annonce :
+"GES : B"
+
+Résultat :
+ges = "B"
+corrected = true
+
+Si la donnée automatique indique une valeur mais qu'aucune preuve
+explicite n'est retrouvée dans l'annonce :
+
+- ne pas inventer une nouvelle valeur ;
+- conserver la valeur automatique uniquement si elle est plausible
+  et cohérente ;
+- sinon retourner null.
+
+────────────────────────────
+PLUSIEURS VALEURS
+────────────────────────────
+
+Si plusieurs classes DPE/GES apparaissent dans le contenu :
+
+1. privilégier la valeur directement associée au bien vendu ;
+2. ignorer les exemples ;
+3. ignorer les biens similaires ;
+4. ignorer les logements voisins ;
+5. ignorer les informations générales sur la résidence ;
+6. ignorer les anciennes annonces ;
+7. ignorer les textes publicitaires génériques.
+
+La valeur doit correspondre au bien décrit par le titre et la description.
+
+En cas d'ambiguïté réelle :
+
+→ retourner null plutôt que de choisir arbitrairement.
         ════════════════════════════════════
             RÈGLES GÉNÉRALES
         ════════════════════════════════════
         
         - Analyse uniquement les informations présentes dans l'annonce.
         - Ne jamais inventer une information absente.
-        - Si une valeur semble correcte ou qu'il existe un doute, conserve la valeur extraite.
+        - Si une valeur extraite automatiquement est confirmée par l'annonce,
+          conserve-la.
+        - Si une valeur extraite automatiquement est contredite par une preuve
+          explicite présente dans l'annonce, corrige-la.
+        - Si une valeur extraite automatiquement n'est pas confirmée mais reste
+          plausible, conserve-la uniquement lorsqu'aucune information contradictoire
+          n'est présente.
+        - Pour la commune et le code postal, une valeur ambiguë ne doit jamais
+          être privilégiée simplement parce qu'elle provient de l'extracteur.
         - Ne crée jamais d'adresse, code postal ou surface sans preuve.
         - Ne modifie jamais un prix sauf erreur manifeste.
         - Une ville citée comme "proche de", "à côté de", "à 10 minutes de"
@@ -2418,30 +1954,303 @@ JSON uniquement.
         
         => typeLocal = "Appartement"
         
-        ════════════════════════════════════
-            NORMALISATION COMMUNE
-        ════════════════════════════════════
-        
-            Toujours retourner la commune en MAJUSCULES.
-        
-            Utiliser des tirets pour les noms composés.
-        
-            Ne jamais utiliser d'abréviation.
-        
-            Exemples :
-        
-              "Bussy-Saint-Georges"
-        => "BUSSY-SAINT-GEORGES"
-        
-            "Saint-Raphaël"
-        => "SAINT-RAPHAEL"
-        
-            "Aix-en-Provence"
-        => "AIX-EN-PROVENCE"
-        
-            Une ville simplement citée comme proche ou voisine
-            ne doit jamais être utilisée comme commune du bien.
-        
+════════════════════════════════════
+PRIORITÉ ÉLEVÉE — LOCALISATION DU BIEN
+════════════════════════════════════
+
+La localisation du bien est une donnée critique pour l'analyse immobilière.
+
+Elle est utilisée ensuite pour :
+- identifier la commune DVF ;
+- déterminer le code INSEE ;
+- rechercher les transactions comparables ;
+- calculer la valeur immobilière ;
+- calculer le marché locatif ;
+- calculer les données locales.
+
+Une erreur de commune ou de code postal peut donc fausser toute l'analyse.
+
+La localisation doit être déterminée avec une grande prudence.
+
+────────────────────────────
+COMMUNE
+────────────────────────────
+
+"city" doit correspondre à la COMMUNE RÉELLE dans laquelle se situe
+le bien vendu.
+
+Ne jamais choisir une ville simplement parce qu'elle apparaît dans :
+- le titre ;
+- la description ;
+- le nom d'un quartier ;
+- le nom d'une plage ;
+- le nom d'une résidence ;
+- une ville voisine ;
+- une indication de proximité ;
+- un trajet ;
+- une destination ;
+- une référence géographique.
+
+Exemples :
+
+"Maison située à Marseille, proche d'Aubagne"
+→ city = "MARSEILLE"
+
+"Maison à Aubagne, à 15 minutes de Marseille"
+→ city = "AUBAGNE"
+
+"Appartement à proximité de Nice"
+→ ne pas utiliser NICE comme commune sans preuve que le bien est à Nice.
+
+────────────────────────────
+QUARTIERS ET ARRONDISSEMENTS
+────────────────────────────
+
+Un quartier ne doit jamais être considéré comme une commune.
+
+Exemple :
+
+"Bonneveine Marseille"
+→ city = "MARSEILLE"
+
+"Pointe Rouge Marseille"
+→ city = "MARSEILLE"
+
+"Endoume Marseille"
+→ city = "MARSEILLE"
+
+"Le Panier Marseille"
+→ city = "MARSEILLE"
+
+Pour Paris, Lyon et Marseille, les arrondissements ne constituent pas
+une commune distincte.
+
+Exemple :
+
+"Marseille 8e"
+→ city = "MARSEILLE"
+
+"13008 Marseille"
+→ city = "MARSEILLE"
+
+"Marseille 8ème arrondissement"
+→ city = "MARSEILLE"
+
+────────────────────────────
+CODE POSTAL
+────────────────────────────
+
+"codePostal" doit correspondre au code postal du BIEN.
+
+Ne jamais inventer un code postal.
+
+Un code postal trouvé dans :
+- une adresse d'agence ;
+- un numéro de téléphone ;
+- un lien ;
+- une adresse de contact ;
+- une autre ville ;
+- une annonce similaire ;
+
+ne doit jamais être utilisé.
+
+Si le code postal est explicitement présent dans l'annonce et clairement
+associé au bien, il doit être privilégié.
+
+────────────────────────────
+RELATION COMMUNE ↔ CODE POSTAL
+────────────────────────────
+
+La commune et le code postal doivent être cohérents entre eux.
+
+Exemple :
+
+city = "MARSEILLE"
+codePostal = "13008"
+
+→ cohérent.
+
+Si le texte contient plusieurs villes ou plusieurs codes postaux,
+identifier d'abord ceux qui correspondent réellement au bien vendu.
+
+Ne jamais associer arbitrairement :
+- une ville trouvée dans le titre ;
+- avec un code postal trouvé ailleurs.
+
+────────────────────────────
+HIÉRARCHIE DES PREUVES DE LOCALISATION
+────────────────────────────
+
+Pour déterminer la commune et le code postal, utiliser les sources
+dans cet ordre :
+
+1. adresse explicitement indiquée pour le bien ;
+2. code postal explicitement associé au bien ;
+3. commune explicitement associée au bien ;
+4. titre de l'annonce lorsqu'il décrit clairement la localisation du bien ;
+5. description lorsqu'elle décrit clairement la localisation du bien ;
+6. contenu structuré de l'annonce ;
+7. données extraites automatiquement.
+
+Les données extraites automatiquement doivent être considérées comme
+des indices et non comme une vérité absolue.
+
+────────────────────────────
+VILLE DANS LE TITRE
+────────────────────────────
+
+Le titre peut contenir des informations marketing ou géographiques.
+
+Exemple :
+
+"Maison de ville à vendre T2/F2 35 m² 295000 € Bonneveine Marseille (13008)"
+
+Interprétation :
+
+- "Bonneveine" = quartier
+- "Marseille" = commune
+- "13008" = code postal
+
+Résultat :
+
+city = "MARSEILLE"
+codePostal = "13008"
+
+Ne jamais retourner :
+
+city = "BONNEVEINE"
+
+ou :
+
+city = "BONNEVEINE-MARSEILLE"
+
+────────────────────────────
+NOMS DE LIEUX
+────────────────────────────
+
+Les noms suivants ne sont pas nécessairement des communes :
+
+- quartiers ;
+- plages ;
+- ports ;
+- domaines ;
+- résidences ;
+- lotissements ;
+- secteurs ;
+- lieux-dits ;
+- monuments ;
+- stations ;
+- zones commerciales.
+
+Exemple :
+
+"sur la plage de la Pointe Rouge à Marseille"
+
+→ "Pointe Rouge" n'est pas la commune.
+
+→ city = "MARSEILLE"
+
+────────────────────────────
+CONFLIT ENTRE EXTRACTION AUTOMATIQUE ET ANNONCE
+────────────────────────────
+
+Si la donnée automatique indique :
+
+city = "BONNEVEINE-MARSEILLE"
+
+mais que l'annonce indique clairement :
+
+"Bonneveine Marseille (13008)"
+
+alors :
+
+city = "MARSEILLE"
+codePostal = "13008"
+
+corrected = true
+
+Si la donnée automatique indique :
+
+city = "MARSEILLE"
+codePostal = "13008"
+
+et que l'annonce confirme ces informations :
+
+→ conserver les valeurs.
+
+────────────────────────────
+CODE POSTAL COMME INDICE
+────────────────────────────
+
+Lorsqu'un code postal français à 5 chiffres est explicitement associé
+à une localisation dans l'annonce, il constitue une preuve forte.
+
+Exemple :
+
+"Marseille (13008)"
+→ city = "MARSEILLE"
+→ codePostal = "13008"
+
+Cependant, ne jamais déduire automatiquement une commune uniquement
+à partir d'un code postal si le contexte est ambigu.
+
+────────────────────────────
+CAS PARTICULIER MARSEILLE
+────────────────────────────
+
+Marseille utilise plusieurs codes postaux correspondant notamment
+à ses arrondissements.
+
+Exemples :
+
+13001 → MARSEILLE
+13002 → MARSEILLE
+13003 → MARSEILLE
+13004 → MARSEILLE
+13005 → MARSEILLE
+13006 → MARSEILLE
+13007 → MARSEILLE
+13008 → MARSEILLE
+13009 → MARSEILLE
+13010 → MARSEILLE
+13011 → MARSEILLE
+13012 → MARSEILLE
+13013 → MARSEILLE
+13014 → MARSEILLE
+13015 → MARSEILLE
+13016 → MARSEILLE
+
+Dans tous ces cas :
+
+city = "MARSEILLE"
+
+et non :
+
+"MARSEILLE-8E-ARRONDISSEMENT"
+"MARSEILLE-13008"
+"BONNEVEINE-MARSEILLE"
+
+────────────────────────────
+NORMALISATION FINALE
+────────────────────────────
+
+Avant de retourner le résultat :
+
+- city doit être le nom de la commune ;
+- city doit être en MAJUSCULES ;
+- les accents doivent être supprimés si nécessaire selon la normalisation
+  utilisée par l'application ;
+- les arrondissements ne doivent pas être ajoutés au nom de la commune ;
+- un quartier ne doit jamais remplacer la commune ;
+- codePostal doit être exactement composé de 5 chiffres lorsqu'il est connu.
+
+Exemple attendu :
+
+{
+  "city": "MARSEILLE",
+  "codePostal": "13008"
+}
+       
         ════════════════════════════════════
             SURFACE
         ════════════════════════════════════
@@ -2636,42 +2445,41 @@ JSON uniquement.
             2,
         )}
         
-        ════════════════════════════════════
-        MISSION
-        ════════════════════════════════════
-        
-        PRIORITÉ 1 :
-        Extraire et valider le DPE.
-        
-          PRIORITÉ 2 :
-        Extraire et valider le GES.
-        
-          PRIORITÉ 3 :
-        Vérifier la localisation.
-        
-          PRIORITÉ 4 :
-        Vérifier le typeLocal.
-        
-          PRIORITÉ 5 :
-        Vérifier la surface.
-        
-          PRIORITÉ 6 :
-        Vérifier le terrain.
-        
-          PRIORITÉ 7 :
-        Vérifier le nombre de pièces.
-        
-          PRIORITÉ 8 :
-        Vérifier les équipements.
-        
-          PRIORITÉ 9 :
-        Vérifier le prix.
-        
-          PRIORITÉ 10 :
-        Corriger uniquement les erreurs certaines.
-        
-          Retourne uniquement le JSON demandé.
-        
+════════════════════════════════════
+MISSION — ORDRE DE PRIORITÉ
+════════════════════════════════════
+
+PRIORITÉ 1 :
+Extraire et valider le DPE.
+
+PRIORITÉ 2 :
+Extraire et valider le GES.
+
+PRIORITÉ 3 :
+Vérifier et reconstruire la localisation.
+
+PRIORITÉ 4 :
+Vérifier le typeLocal.
+
+PRIORITÉ 5 :
+Vérifier la surface.
+
+PRIORITÉ 6 :
+Vérifier le terrain.
+
+PRIORITÉ 7 :
+Vérifier le nombre de pièces.
+
+PRIORITÉ 8 :
+Vérifier les équipements.
+
+PRIORITÉ 9 :
+Vérifier le prix.
+
+PRIORITÉ 10 :
+Corriger uniquement les erreurs certaines.
+
+Retourne uniquement le JSON demandé.
         ════════════════════════════════════
         FORMAT JSON OBLIGATOIRE
         ════════════════════════════════════

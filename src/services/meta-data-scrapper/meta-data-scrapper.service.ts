@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { CheerioAPI } from 'cheerio';
-import { Browser, chromium } from 'playwright';
+import { Browser, chromium, Page } from 'playwright';
 import { PropertyFeatures } from './interfaces/property-features.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenaiService } from '../openai/openai.service';
@@ -117,170 +117,34 @@ export class MetadataScraperService implements OnModuleDestroy {
         this.logger.log(`🏠 Plateforme détectée : ${platform ?? 'autre'}`);
 
         // =====================================================
-        // SELOGER / LEBONCOIN / LOGIC-IMMO
-        // =====================================================
-
-        if (platform === 'seloger' || platform === 'leboncoin' || platform === 'logic-immo') {
-            // -------------------------------------------------
-            // DESKTOP → PLAYWRIGHT UNIQUEMENT
-            // -------------------------------------------------
-            if (device === 'desktop') {
-                try {
-                    this.logger.log(`🖥️ ${platform.toUpperCase()} → Desktop → Playwright`);
-
-                    const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
-
-                    if (this.isValidResult(playwrightResult)) {
-                        this.logger.log(`✅ ${platform.toUpperCase()} → Playwright réussi`);
-
-                        return {
-                            ...playwrightResult,
-                            source: 'playwright',
-                            url: normalizedUrl,
-                        };
-                    }
-
-                    this.logger.warn(`⚠️ ${platform.toUpperCase()} → résultat Playwright insuffisant`);
-                } catch (error) {
-                    this.logger.warn(`❌ ${platform.toUpperCase()} → Playwright échoué`);
-
-                    if (error instanceof Error) {
-                        this.logger.warn(error.message);
-                    }
-                }
-
-                throw new Error(`Impossible d'extraire les métadonnées de ${platform}`);
-            }
-
-            // -------------------------------------------------
-            // MOBILE → OPENAI EN PRIORITÉ
-            // -------------------------------------------------
-            if (device === 'mobile') {
-                try {
-                    this.logger.log(`📱 ${platform.toUpperCase()} → Mobile → OpenAI`);
-
-                    const openAiResult = await this.scrapeWithOpenAI(normalizedUrl, platform);
-
-                    if (this.isValidResult(openAiResult)) {
-                        this.logger.log(`✅ ${platform.toUpperCase()} → OpenAI réussi`);
-
-                        return {
-                            ...openAiResult,
-                            source: 'openai',
-                            url: normalizedUrl,
-                        };
-                    }
-
-                    this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI résultat insuffisant`);
-                } catch (error) {
-                    this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI échoué`);
-
-                    if (error instanceof Error) {
-                        this.logger.warn(error.message);
-                    }
-                }
-
-                // -------------------------------------------------
-                // MOBILE → PLAYWRIGHT FALLBACK
-                // -------------------------------------------------
-                try {
-                    this.logger.warn(`📱 ${platform.toUpperCase()} → fallback Playwright`);
-
-                    const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
-
-                    if (this.isValidResult(playwrightResult)) {
-                        this.logger.log(`✅ ${platform.toUpperCase()} → Playwright fallback réussi`);
-
-                        return {
-                            ...playwrightResult,
-                            source: 'playwright',
-                            url: normalizedUrl,
-                        };
-                    }
-                } catch (error) {
-                    this.logger.warn(`❌ ${platform.toUpperCase()} → Playwright fallback échoué`);
-
-                    if (error instanceof Error) {
-                        this.logger.warn(error.message);
-                    }
-                }
-
-                throw new Error(`Impossible d'extraire les métadonnées de ${platform}`);
-            }
-        }
-
-        // =====================================================
-        // 2. AUTRES SITES → AXIOS / CHEERIO
+        // 1. TOUS LES SITES → PLAYWRIGHT
         // =====================================================
 
         try {
-            const htmlResult = await this.scrapeHtml(normalizedUrl);
+            this.logger.log(`🎭 ${platform ? platform.toUpperCase() : 'SITE'} → Playwright → ${device}`);
 
-            if (this.isValidResult(htmlResult)) {
-                this.logger.log(`✅ Métadonnées récupérées avec Axios/Cheerio`);
+            const result = await this.scrapeWithPlaywright(normalizedUrl, device);
 
-                return {
-                    ...htmlResult,
-                    source: 'html',
-                    url: normalizedUrl,
-                };
-            }
-
-            this.logger.warn(`⚠️ Axios/Cheerio → métadonnées insuffisantes`);
-        } catch (error) {
-            this.logger.warn(`⚠️ Axios/Cheerio → erreur`);
-
-            if (error instanceof Error) {
-                this.logger.warn(error.message);
-            }
-        }
-
-        // =====================================================
-        // 3. AUTRES SITES → PLAYWRIGHT
-        // =====================================================
-
-        try {
-            this.logger.log(`🎭 Tentative de récupération avec Playwright`);
-
-            const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
-
-            if (this.isValidResult(playwrightResult)) {
-                this.logger.log(`✅ Métadonnées récupérées avec Playwright`);
+            if (this.isValidResult(result)) {
+                this.logger.log(`✅ ${platform ? platform.toUpperCase() : 'SITE'} → Playwright réussi`);
 
                 return {
-                    ...playwrightResult,
+                    ...result,
                     source: 'playwright',
                     url: normalizedUrl,
                 };
             }
 
-            this.logger.warn(`⚠️ Playwright → métadonnées insuffisantes`);
+            this.logger.warn(`⚠️ ${platform ?? 'SITE'} → Playwright résultat insuffisant`);
         } catch (error) {
-            this.logger.warn(`⚠️ Playwright → erreur`);
+            this.logger.error(`❌ ${platform ?? 'SITE'} → Playwright échoué`);
 
             if (error instanceof Error) {
-                this.logger.warn(error.message);
+                this.logger.error(error.message);
             }
         }
 
         throw new Error(`Impossible d'extraire les métadonnées de cette URL`);
-    }
-
-    private async scrapeWithOpenAI(
-        url: string,
-        platform: 'seloger' | 'leboncoin' | 'logic-immo',
-    ): Promise<ListingMetadata> {
-        this.logger.log(`🤖 OPENAI SCRAPING → ${platform}`);
-
-        const response = await this.openAiService.extractListingMetadata({
-            url,
-        });
-
-        return {
-            ...response,
-            source: 'openai',
-            url,
-        };
     }
 
     private cleanUrl(rawUrl: string): string {
@@ -393,137 +257,118 @@ export class MetadataScraperService implements OnModuleDestroy {
     }
 
     private async scrapeWithPlaywright(url: string, device: AnalysisDevice): Promise<ListingMetadata> {
-        const browser = await this.getBrowser(device);
+        const start = Date.now();
+
+        const browser = await this.getBrowser();
+
+        const isMobile = device === 'mobile';
 
         const context = await browser.newContext({
-            viewport: {
-                width: 1440,
-                height: 900,
-            },
+            viewport: isMobile ? { width: 390, height: 844 } : { width: 1440, height: 900 },
 
-            screen: {
-                width: 1920,
-                height: 1080,
-            },
+            screen: isMobile ? { width: 390, height: 844 } : { width: 1920, height: 1080 },
 
             locale: 'fr-FR',
             timezoneId: 'Europe/Paris',
             javaScriptEnabled: true,
+
+            isMobile,
+            hasTouch: isMobile,
+
+            userAgent: isMobile
+                ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1'
+                : undefined,
         });
 
         const page = await context.newPage();
 
         try {
+            this.logger.log(`🌐 Navigation ${isMobile ? 'MOBILE' : 'DESKTOP'} : ${url}`);
+
             await page.goto(url, {
                 waitUntil: 'domcontentloaded',
-                timeout: 30000,
+                timeout: 15000,
             });
 
-            console.log('PAGE TITLE:', await page.title());
-            console.log('PAGE URL:', page.url());
+            this.logger.log(`⏱️ page.goto : ${Date.now() - start} ms`);
 
-            // Leboncoin peut continuer à naviguer après DOMContentLoaded
-            await page.waitForTimeout(3000);
+            this.logger.log(`🌐 URL après navigation : ${page.url()}`);
+            this.logger.log(`📄 TITLE : ${await page.title()}`);
 
-            let html = '';
+            // Petit délai uniquement
+            await page.waitForTimeout(500);
 
-            for (let attempt = 1; attempt <= 5; attempt++) {
-                try {
-                    html = await page.content();
+            let html = await page.content();
 
-                    if (html && html.length > 1000) {
-                        this.logger.log(`✅ HTML récupéré après tentative ${attempt} (${html.length} caractères)`);
-                        break;
-                    }
-                } catch (error) {
-                    this.logger.warn(`⚠️ page.content() échoué - tentative ${attempt}/5`);
-
-                    if (error instanceof Error) {
-                        this.logger.warn(error.message);
-                    }
-
-                    await page.waitForTimeout(1000);
-                }
-            }
-
-            if (!html) {
-                throw new Error('Impossible de récupérer le HTML après plusieurs tentatives');
-            }
-
-            console.log('HTML LENGTH:', html.length);
-
-            try {
-                const bodyText = await page.locator('body').innerText();
-
-                console.log('BODY TEXT:', bodyText.substring(0, 2000));
-            } catch (error) {
-                this.logger.warn('⚠️ Impossible de récupérer le body text');
-            }
-            await page.screenshot({
-                path: '/tmp/playwright-debug.png',
-                fullPage: true,
-            });
-
-            const isChallenge = this.isAntiBotPage(html);
-
-            if (isChallenge) {
-                this.logger.warn('⚠️ Challenge anti-bot détecté');
-                this.logger.log('⏳ Attente résolution challenge...');
-
-                // On attend que la page quitte le challenge
-                try {
-                    await page.waitForFunction(
-                        () => {
-                            const title = document.title.toLowerCase();
-                            const body = document.body?.innerText?.toLowerCase() || '';
-
-                            return (
-                                !title.includes('just a moment') &&
-                                !body.includes('enable javascript and cookies') &&
-                                !body.includes('datadome') &&
-                                !document.documentElement.innerHTML.toLowerCase().includes('captcha-delivery.com')
-                            );
-                        },
-                        {
-                            timeout: this.challengeTimeout,
-                        },
-                    );
-                } catch {
-                    this.logger.warn('⚠️ Challenge toujours présent après 30 secondes');
-                }
-
-                await page.waitForTimeout(2000);
-
-                html = await page.content();
-            }
-
-            const finalTitle = await page.title();
-            const finalUrl = page.url();
-
-            this.logger.log(`FINAL TITLE: ${finalTitle}`);
-            this.logger.log(`FINAL URL: ${finalUrl}`);
+            this.logger.log(`⏱️ HTML initial : ${Date.now() - start} ms`);
 
             if (this.isAntiBotPage(html)) {
-                await page.screenshot({
-                    path: '/tmp/antibot-debug.png',
-                    fullPage: true,
-                });
+                this.logger.warn(`🛡️ Challenge anti-bot détecté`);
 
+                await this.waitForAntiBotResolution(page);
+
+                this.logger.log(`⏱️ Après challenge : ${Date.now() - start} ms`);
+            }
+
+            html = await page.content();
+
+            if (!html || html.length < 1000) {
+                throw new Error('HTML final invalide ou trop court');
+            }
+
+            if (this.isAntiBotPage(html)) {
                 throw new Error('Challenge anti-bot non résolu');
             }
 
-            await page.screenshot({
-                path: '/tmp/scrape-debug.png',
-                fullPage: true,
-            });
+            this.logger.log(`✅ HTML final récupéré : ${html.length} caractères`);
+
+            this.logger.log(`⏱️ TOTAL Playwright : ${Date.now() - start} ms`);
+
+            const metadata = await this.extractMetadata(html, url);
 
             return {
-                ...(await this.extractMetadata(html, url)),
-                source: 'playwright' as const,
+                ...metadata,
+                source: 'playwright',
             };
         } finally {
             await context.close();
         }
+    }
+
+    private async waitForAntiBotResolution(page: Page): Promise<void> {
+        this.logger.log(`⏳ Attente de résolution du challenge anti-bot...`);
+
+        try {
+            await page.waitForFunction(
+                () => {
+                    const title = document.title?.toLowerCase() ?? '';
+
+                    const body = document.body?.innerText?.toLowerCase() ?? '';
+
+                    const html = document.documentElement?.innerHTML?.toLowerCase() ?? '';
+
+                    const challengeDetected =
+                        title.includes('just a moment') ||
+                        title.includes('datadome') ||
+                        body.includes('enable javascript and cookies') ||
+                        body.includes('datadome') ||
+                        html.includes('captcha-delivery.com') ||
+                        html.includes('datadome');
+
+                    return !challengeDetected;
+                },
+                {
+                    timeout: this.challengeTimeout,
+                },
+            );
+
+            this.logger.log(`✅ Challenge potentiellement résolu`);
+        } catch {
+            this.logger.warn(`⚠️ Challenge toujours présent après ${this.challengeTimeout / 1000}s`);
+        }
+
+        // laisse le site terminer son rendu
+        await page.waitForTimeout(2000);
     }
 
     private isAntiBotPage(html: string): boolean {
@@ -538,11 +383,18 @@ export class MetadataScraperService implements OnModuleDestroy {
     }
 
     private async extractMetadata(html: string, url: string): Promise<Omit<ListingMetadata, 'source'>> {
+        const start = Date.now();
+
+        const logTime = (label: string) => {
+            this.logger.log(`⏱️ extractMetadata → ${label}: ${Date.now() - start} ms`);
+        };
         const $: CheerioAPI = cheerio.load(html);
 
         const schemas: ListingSchema[] = this.extractSchemas($);
+        logTime('schemas');
 
         const listing = this.findBestSchema(schemas);
+        logTime('schema');
 
         const title: string = this.decodeHtml(
             listing?.name || $('meta[property="og:title"]').attr('content') || $('title').text().trim(),
@@ -703,6 +555,8 @@ export class MetadataScraperService implements OnModuleDestroy {
             description,
             url,
         });
+        logTime('location / DVF');
+
         console.log('========================================');
         console.log('🔥 AVANT OPENAI ENERGY');
         console.log('🔥 DPE:', dpe);
@@ -729,7 +583,7 @@ export class MetadataScraperService implements OnModuleDestroy {
                 price,
             },
         });
-
+        logTime('OpenAI verification');
         console.log('========================================');
         console.log('🔥 APRÈS OPENAI ENERGY');
         console.log('🔥 VERIFIED DPE:', verified.dpe);
@@ -856,17 +710,16 @@ export class MetadataScraperService implements OnModuleDestroy {
         return null;
     }
 
-    private async getBrowser(device: AnalysisDevice) {
+    private async getBrowser() {
         if (!this.browser || !this.browser.isConnected()) {
             const headless = this.configService.get<string>('PLAYWRIGHT_HEADLESS', 'false') === 'true';
 
             this.logger.log('🚀 Launch Chromium');
-            this.logger.log(`📱 Device analyse : ${device}`);
             this.logger.log(`🖥️ Chromium headless : ${headless}`);
-            this.logger.log(`🖥️ DISPLAY : ${process.env.DISPLAY ?? 'non défini'}`);
 
             this.browser = await chromium.launch({
                 headless,
+
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -963,7 +816,7 @@ export class MetadataScraperService implements OnModuleDestroy {
     }
 
     private isValidResult(data: Omit<ListingMetadata, 'source'>): boolean {
-        return Boolean(data.title || data.price || data.description || data.images?.length);
+        return Boolean(data.title && (data.price || data.surface || data.description));
     }
 
     private extractPropertyFeatures(title: string, description: string): PropertyFeatures {
