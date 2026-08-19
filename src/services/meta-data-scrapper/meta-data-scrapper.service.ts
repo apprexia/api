@@ -8,90 +8,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OpenaiService } from '../openai/openai.service';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-
-interface SchemaAddress {
-    streetAddress?: string;
-    codePostal?: string;
-    addressLocality?: string;
-    addressRegion?: string;
-}
-
-export interface VerifyExtractedMetadataResult {
-    metadata: Partial<ListingMetadata>;
-
-    corrected: boolean;
-    confidence: number;
-    corrections: string[];
-    reason?: string;
-}
-
-export interface ListingMetadata {
-    source: 'html' | 'playwright' | 'openai' | 'manual';
-
-    url?: string;
-
-    title?: string;
-    description?: string;
-
-    address?: string;
-    streetAddress?: string;
-    city?: string;
-    codePostal?: string;
-    codeInsee?: string;
-    latitude?: number;
-    longitude?: number;
-
-    typeLocal?: 'Maison' | 'Appartement' | 'Terrain' | 'Local commercial' | 'Parking' | 'Immeuble' | 'Inconnu';
-
-    surface?: number;
-    rooms?: number;
-    terrain?: number;
-    floor?: number | null;
-    bedrooms?: number;
-    constructionYear?: number;
-    condition?: string;
-    dpe?: string;
-    ges?: string;
-
-    propertyFeatures?: PropertyFeatures;
-    featureLabels?: string[];
-
-    price?: number;
-    currency?: string;
-
-    images?: string[];
-}
-
-interface SchemaOffer {
-    price?: string | number;
-    lowPrice?: string | number;
-    priceCurrency?: string;
-}
-
-interface ListingSchema {
-    '@type'?: string;
-    '@graph'?: ListingSchema[];
-    mainEntity?: ListingSchema;
-
-    name?: string;
-    description?: string;
-
-    image?: string | string[];
-
-    address?: SchemaAddress;
-
-    offers?: SchemaOffer;
-
-    price?: string | number;
-    priceCurrency?: string;
-}
+import { ListingMetadata } from './interfaces/listing-metadata.interface';
+import { ListingSchema } from './interfaces/listing-schema.interface';
 
 type AnalysisDevice = 'mobile' | 'desktop';
 
 @Injectable()
 export class MetadataScraperService implements OnModuleDestroy {
     private readonly logger = new Logger(MetadataScraperService.name);
-    private readonly challengeTimeout = 15000;
+    private readonly challengeTimeout = 5000;
     private browser?: Browser;
 
     constructor(
@@ -305,9 +230,11 @@ export class MetadataScraperService implements OnModuleDestroy {
             if (this.isAntiBotPage(html)) {
                 this.logger.warn(`🛡️ Challenge anti-bot détecté`);
 
-                await this.waitForAntiBotResolution(page);
+                const resolved = await this.waitForAntiBotResolution(page);
 
-                this.logger.log(`⏱️ Après challenge : ${Date.now() - start} ms`);
+                if (!resolved) {
+                    throw new Error('Challenge anti-bot non résolu');
+                }
             }
 
             html = await page.content();
@@ -335,7 +262,7 @@ export class MetadataScraperService implements OnModuleDestroy {
         }
     }
 
-    private async waitForAntiBotResolution(page: Page): Promise<void> {
+    private async waitForAntiBotResolution(page: Page): Promise<boolean> {
         this.logger.log(`⏳ Attente de résolution du challenge anti-bot...`);
 
         try {
@@ -363,12 +290,13 @@ export class MetadataScraperService implements OnModuleDestroy {
             );
 
             this.logger.log(`✅ Challenge potentiellement résolu`);
+
+            return true;
         } catch {
             this.logger.warn(`⚠️ Challenge toujours présent après ${this.challengeTimeout / 1000}s`);
-        }
 
-        // laisse le site terminer son rendu
-        await page.waitForTimeout(2000);
+            return false;
+        }
     }
 
     private isAntiBotPage(html: string): boolean {
@@ -476,7 +404,6 @@ export class MetadataScraperService implements OnModuleDestroy {
                 jsonString.includes('"ges"')
             ) {
                 console.log('🔥🔥 ENERGY JSON TROUVÉ 🔥🔥');
-                console.log(jsonString.substring(0, 10000));
             }
 
             const energy = this.extractEnergyFromObject(data);
