@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { ListingPreview, ListingPreviewPlatform } from '../interfaces/listing-preview.interface';
@@ -76,15 +76,23 @@ export class MetadataPreviewService {
         }
     }
 
-    private normalizeUrl(rawUrl: string): string {
-        const value = rawUrl.trim();
+    private normalizeUrl(url: string): string {
+        if (!url || typeof url !== 'string') {
+            throw new BadRequestException('URL invalide');
+        }
+
+        const value = url.trim();
 
         try {
-            const url = new URL(value);
+            const parsed = new URL(value);
 
-            return url.toString();
+            if (!['http:', 'https:'].includes(parsed.protocol)) {
+                throw new Error();
+            }
+
+            return parsed.toString();
         } catch {
-            throw new Error('URL invalide');
+            throw new BadRequestException('URL invalide');
         }
     }
 
