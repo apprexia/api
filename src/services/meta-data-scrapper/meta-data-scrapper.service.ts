@@ -1,14 +1,13 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { CheerioAPI } from 'cheerio';
-import { chromium } from 'playwright';
+import { Browser, chromium } from 'playwright';
 import { PropertyFeatures } from './interfaces/property-features.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { OpenaiService } from '../openai/openai.service';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
 
 interface SchemaAddress {
     streetAddress?: string;
@@ -90,8 +89,10 @@ interface ListingSchema {
 type AnalysisDevice = 'mobile' | 'desktop';
 
 @Injectable()
-export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
+export class MetadataScraperService implements OnModuleDestroy {
     private readonly logger = new Logger(MetadataScraperService.name);
+    private readonly challengeTimeout = 15000;
+    private browser?: Browser;
 
     constructor(
         private readonly prisma: PrismaService,
@@ -99,14 +100,6 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         private readonly httpService: HttpService,
         private readonly configService: ConfigService,
     ) {}
-
-    private browser;
-
-    async onModuleInit() {
-        // this.browser = await chromium.launch({
-        //     headless: false,
-        // });
-    }
 
     async onModuleDestroy() {
         if (this.browser?.isConnected()) {
@@ -124,69 +117,96 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`🏠 Plateforme détectée : ${platform ?? 'autre'}`);
 
         // =====================================================
-        // 1. SELOGER / LEBONCOIN / LOGIC-IMMO
-        //    → OPENAI EN PRIORITÉ
-        //    → PLAYWRIGHT EN FALLBACK
+        // SELOGER / LEBONCOIN / LOGIC-IMMO
         // =====================================================
 
         if (platform === 'seloger' || platform === 'leboncoin' || platform === 'logic-immo') {
             // -------------------------------------------------
-            // OPENAI
+            // DESKTOP → PLAYWRIGHT UNIQUEMENT
             // -------------------------------------------------
+            if (device === 'desktop') {
+                try {
+                    this.logger.log(`🖥️ ${platform.toUpperCase()} → Desktop → Playwright`);
 
-            try {
-                this.logger.log(`🤖 ${platform.toUpperCase()} → tentative OpenAI`);
+                    const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
 
-                const openAiResult = await this.scrapeWithOpenAI(normalizedUrl, platform);
+                    if (this.isValidResult(playwrightResult)) {
+                        this.logger.log(`✅ ${platform.toUpperCase()} → Playwright réussi`);
 
-                if (this.isValidResult(openAiResult)) {
-                    this.logger.log(`✅ ${platform.toUpperCase()} → OpenAI réussi`);
+                        return {
+                            ...playwrightResult,
+                            source: 'playwright',
+                            url: normalizedUrl,
+                        };
+                    }
 
-                    return {
-                        ...openAiResult,
-                        source: 'openai',
-                        url: normalizedUrl,
-                    };
+                    this.logger.warn(`⚠️ ${platform.toUpperCase()} → résultat Playwright insuffisant`);
+                } catch (error) {
+                    this.logger.warn(`❌ ${platform.toUpperCase()} → Playwright échoué`);
+
+                    if (error instanceof Error) {
+                        this.logger.warn(error.message);
+                    }
                 }
 
-                this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI résultat insuffisant`);
-            } catch (error) {
-                this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI échoué`);
-
-                if (error instanceof Error) {
-                    this.logger.warn(error.message);
-                }
+                throw new Error(`Impossible d'extraire les métadonnées de ${platform}`);
             }
 
             // -------------------------------------------------
-            // PLAYWRIGHT FALLBACK
+            // MOBILE → OPENAI EN PRIORITÉ
             // -------------------------------------------------
+            if (device === 'mobile') {
+                try {
+                    this.logger.log(`📱 ${platform.toUpperCase()} → Mobile → OpenAI`);
 
-            try {
-                this.logger.warn(`🎭 ${platform.toUpperCase()} → fallback Playwright`);
+                    const openAiResult = await this.scrapeWithOpenAI(normalizedUrl, platform);
 
-                const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
+                    if (this.isValidResult(openAiResult)) {
+                        this.logger.log(`✅ ${platform.toUpperCase()} → OpenAI réussi`);
 
-                if (this.isValidResult(playwrightResult)) {
-                    this.logger.log(`✅ ${platform.toUpperCase()} → Playwright réussi`);
+                        return {
+                            ...openAiResult,
+                            source: 'openai',
+                            url: normalizedUrl,
+                        };
+                    }
 
-                    return {
-                        ...playwrightResult,
-                        source: 'playwright',
-                        url: normalizedUrl,
-                    };
+                    this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI résultat insuffisant`);
+                } catch (error) {
+                    this.logger.warn(`⚠️ ${platform.toUpperCase()} → OpenAI échoué`);
+
+                    if (error instanceof Error) {
+                        this.logger.warn(error.message);
+                    }
                 }
 
-                this.logger.warn(`⚠️ ${platform.toUpperCase()} → Playwright résultat insuffisant`);
-            } catch (error) {
-                this.logger.warn(`❌ ${platform.toUpperCase()} → Playwright échoué`);
+                // -------------------------------------------------
+                // MOBILE → PLAYWRIGHT FALLBACK
+                // -------------------------------------------------
+                try {
+                    this.logger.warn(`📱 ${platform.toUpperCase()} → fallback Playwright`);
 
-                if (error instanceof Error) {
-                    this.logger.warn(error.message);
+                    const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
+
+                    if (this.isValidResult(playwrightResult)) {
+                        this.logger.log(`✅ ${platform.toUpperCase()} → Playwright fallback réussi`);
+
+                        return {
+                            ...playwrightResult,
+                            source: 'playwright',
+                            url: normalizedUrl,
+                        };
+                    }
+                } catch (error) {
+                    this.logger.warn(`❌ ${platform.toUpperCase()} → Playwright fallback échoué`);
+
+                    if (error instanceof Error) {
+                        this.logger.warn(error.message);
+                    }
                 }
+
+                throw new Error(`Impossible d'extraire les métadonnées de ${platform}`);
             }
-
-            throw new Error(`Impossible d'extraire les métadonnées de ${platform}`);
         }
 
         // =====================================================
@@ -222,7 +242,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         try {
             this.logger.log(`🎭 Tentative de récupération avec Playwright`);
 
-            const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl);
+            const playwrightResult = await this.scrapeWithPlaywright(normalizedUrl, device);
 
             if (this.isValidResult(playwrightResult)) {
                 this.logger.log(`✅ Métadonnées récupérées avec Playwright`);
@@ -372,16 +392,18 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         return this.extractMetadata(html, url);
     }
 
-    private async scrapeWithPlaywright(url: string, device: string): Promise<ListingMetadata> {
+    private async scrapeWithPlaywright(url: string, device: AnalysisDevice): Promise<ListingMetadata> {
         const browser = await this.getBrowser(device);
 
         const context = await browser.newContext({
-            userAgent:
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-
             viewport: {
                 width: 1440,
                 height: 900,
+            },
+
+            screen: {
+                width: 1920,
+                height: 1080,
             },
 
             locale: 'fr-FR',
@@ -400,14 +422,45 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
             console.log('PAGE TITLE:', await page.title());
             console.log('PAGE URL:', page.url());
 
+            // Leboncoin peut continuer à naviguer après DOMContentLoaded
             await page.waitForTimeout(3000);
 
-            let html = await page.content();
+            let html = '';
+
+            for (let attempt = 1; attempt <= 5; attempt++) {
+                try {
+                    html = await page.content();
+
+                    if (html && html.length > 1000) {
+                        this.logger.log(`✅ HTML récupéré après tentative ${attempt} (${html.length} caractères)`);
+                        break;
+                    }
+                } catch (error) {
+                    this.logger.warn(`⚠️ page.content() échoué - tentative ${attempt}/5`);
+
+                    if (error instanceof Error) {
+                        this.logger.warn(error.message);
+                    }
+
+                    await page.waitForTimeout(1000);
+                }
+            }
+
+            if (!html) {
+                throw new Error('Impossible de récupérer le HTML après plusieurs tentatives');
+            }
 
             console.log('HTML LENGTH:', html.length);
-            console.log('BODY TEXT:', (await page.locator('body').innerText()).substring(0, 2000));
+
+            try {
+                const bodyText = await page.locator('body').innerText();
+
+                console.log('BODY TEXT:', bodyText.substring(0, 2000));
+            } catch (error) {
+                this.logger.warn('⚠️ Impossible de récupérer le body text');
+            }
             await page.screenshot({
-                path: '/tmp/logic-immo-challenge.png',
+                path: '/tmp/playwright-debug.png',
                 fullPage: true,
             });
 
@@ -432,7 +485,7 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
                             );
                         },
                         {
-                            timeout: 30000,
+                            timeout: this.challengeTimeout,
                         },
                     );
                 } catch {
@@ -803,14 +856,23 @@ export class MetadataScraperService implements OnModuleInit, OnModuleDestroy {
         return null;
     }
 
-    private async getBrowser(device: string) {
+    private async getBrowser(device: AnalysisDevice) {
         if (!this.browser || !this.browser.isConnected()) {
+            const headless = this.configService.get<string>('PLAYWRIGHT_HEADLESS', 'false') === 'true';
+
             this.logger.log('🚀 Launch Chromium');
             this.logger.log(`📱 Device analyse : ${device}`);
+            this.logger.log(`🖥️ Chromium headless : ${headless}`);
+            this.logger.log(`🖥️ DISPLAY : ${process.env.DISPLAY ?? 'non défini'}`);
 
             this.browser = await chromium.launch({
-                headless: device === 'desktop' ? false : true,
-                args: ['--disable-blink-features=AutomationControlled'],
+                headless,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-blink-features=AutomationControlled',
+                    '--window-size=1920,1080',
+                ],
             });
         }
 

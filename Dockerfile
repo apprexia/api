@@ -5,6 +5,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PDF_BROWSER=playwright
+ENV DISPLAY=:99
+ENV PLAYWRIGHT_HEADLESS=false
+ENV PLAYWRIGHT_DEBUG=false
 
 COPY package*.json ./
 
@@ -18,6 +21,10 @@ COPY . .
 
 RUN npm run build
 
+COPY docker/start.sh /app/start.sh
+
+RUN chmod +x /app/start.sh
+
 EXPOSE 3000
 
-CMD ["node", "dist/src/main.js"]
+CMD ["/app/start.sh"]
