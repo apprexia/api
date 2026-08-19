@@ -2522,7 +2522,7 @@ Retourne uniquement le JSON demandé.
           `;
 
         const response = await this.openAI.chat.completions.create({
-            model: 'gpt-5-mini',
+            model: 'gpt-4.1-mini',
             response_format: {
                 type: 'json_object',
             },
