@@ -19,6 +19,7 @@ import { ReportModule } from './report/report.module';
 import { HttpModule } from '@nestjs/axios';
 import { CommuneIndicatorModule } from './commune-indicator/commune-indicator.module';
 import { ConfigModule } from '@nestjs/config';
+import { MetaDataScrapperModule } from './meta-data-scrapper/meta-data-scrapper.module';
 
 @Module({
     imports: [
@@ -35,9 +36,11 @@ import { ConfigModule } from '@nestjs/config';
         RentalMarketModule,
         ReportModule,
         CommuneIndicatorModule,
+        MetaDataScrapperModule,
         ConfigModule.forRoot({
             isGlobal: true,
         }),
+        MetaDataScrapperModule,
     ],
     controllers: [AppController],
     providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService, ReportService],
