@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { OpenaiService } from '../openai/openai.service';
 import { AnalysisAiResult } from '../../analyses/interfaces/analysis-ai-result.interface';
-import { ListingMetadata } from '../meta-data-scrapper/meta-data-scrapper.service';
 import { DvfMarketData } from '../../analyses/interfaces/dvf-market-data.interface';
 import { ApprexiaMarketData } from '../../analyses/interfaces/apprexia-market-data.interface';
 import { RentalResult } from '../../analyses/interfaces/rental-result.interface';
 import { LocationAnalysis } from '../../apprexia-engine/interfaces/location-analysis.interface';
 import { CommuneIndicator } from '@prisma/client';
+import { ListingMetadata } from '../meta-data-scrapper/interfaces/listing-metadata.interface';
 
 @Injectable()
 export class AnalysesAiService {

@@ -4,7 +4,7 @@ import { UpdateAnalysisDto } from './dto/update-analysis.dto';
 import { PrismaService } from '../services/prisma/prisma.service';
 import { AnalysesAiService } from '../services/analyses-ai/analyses-ai.service';
 import { AnalysisAiResult, Verdict } from './interfaces/analysis-ai-result.interface';
-import { ListingMetadata, MetadataScraperService } from '../services/meta-data-scrapper/meta-data-scrapper.service';
+import { MetadataScraperService } from '../services/meta-data-scrapper/meta-data-scrapper.service';
 import { UsersService } from 'src/users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { DvfService } from '../dvf/dvf.service';
@@ -21,6 +21,7 @@ import { LocationAnalysis, LocationEngineInput } from '../apprexia-engine/interf
 import { GeocodingProviderService } from '../apprexia-engine/providers/geocoding-provider/geocoding-provider.service';
 import { AmenityEngineService } from '../apprexia-engine/engines/amenity-engine/amenity-engine.service';
 import { CommuneIndicatorService } from '../commune-indicator/commune-indicator.service';
+import { ListingMetadata } from '../services/meta-data-scrapper/interfaces/listing-metadata.interface';
 
 @Injectable()
 export class AnalysesService {
