@@ -1,7 +1,7 @@
 import { PropertyFeatures } from './property-features.interface';
 
 export interface ListingMetadata {
-    source: 'html' | 'playwright' | 'openai' | 'manual';
+    source: 'html' | 'playwright' | 'firecrawl' | 'openai' | 'manual';
 
     url?: string;
 
@@ -13,6 +13,7 @@ export interface ListingMetadata {
     city?: string;
     codePostal?: string;
     codeInsee?: string;
+
     latitude?: number;
     longitude?: number;
 
@@ -20,11 +21,17 @@ export interface ListingMetadata {
 
     surface?: number;
     rooms?: number;
-    terrain?: number;
-    floor?: number | null;
     bedrooms?: number;
+    bathrooms?: number;
+
+    terrain?: number;
+
+    floor?: number | null;
+    totalFloors?: number;
+
     constructionYear?: number;
     condition?: string;
+
     dpe?: string;
     ges?: string;
 
@@ -35,4 +42,12 @@ export interface ListingMetadata {
     currency?: string;
 
     images?: string[];
+
+    heatingType?: string;
+    charges?: number;
+
+    reference?: string;
+
+    sellerName?: string;
+    sellerSiret?: string;
 }

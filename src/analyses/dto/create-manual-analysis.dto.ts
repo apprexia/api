@@ -1,4 +1,4 @@
-import { PropertyFeatures } from '../../services/meta-data-scrapper/interfaces/property-features.interface';
+import { PropertyFeatures } from '../../meta-data-scrapper/interfaces/property-features.interface';
 
 export class CreateManualAnalysisDto {
     adresse: string;

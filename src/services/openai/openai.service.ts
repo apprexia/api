@@ -5,8 +5,8 @@ import { DvfMarketData } from '../../analyses/interfaces/dvf-market-data.interfa
 import { RentalResult } from '../../analyses/interfaces/rental-result.interface';
 import { LocationAnalysis } from '../../apprexia-engine/interfaces/location-analysis.interface';
 import { CommuneIndicator } from '@prisma/client';
-import { PropertyFeatures } from '../meta-data-scrapper/interfaces/property-features.interface';
-import { ListingMetadata } from '../meta-data-scrapper/interfaces/listing-metadata.interface';
+import { PropertyFeatures } from '../../meta-data-scrapper/interfaces/property-features.interface';
+import { ListingMetadata } from '../../meta-data-scrapper/interfaces/listing-metadata.interface';
 
 @Injectable()
 export class OpenaiService {

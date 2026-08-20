@@ -6,7 +6,7 @@ import { ApprexiaMarketData } from '../../analyses/interfaces/apprexia-market-da
 import { RentalResult } from '../../analyses/interfaces/rental-result.interface';
 import { LocationAnalysis } from '../../apprexia-engine/interfaces/location-analysis.interface';
 import { CommuneIndicator } from '@prisma/client';
-import { ListingMetadata } from '../meta-data-scrapper/interfaces/listing-metadata.interface';
+import { ListingMetadata } from '../../meta-data-scrapper/interfaces/listing-metadata.interface';
 
 @Injectable()
 export class AnalysesAiService {

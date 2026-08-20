@@ -20,6 +20,7 @@ import { HttpModule } from '@nestjs/axios';
 import { CommuneIndicatorModule } from './commune-indicator/commune-indicator.module';
 import { ConfigModule } from '@nestjs/config';
 import { MetaDataScrapperModule } from './meta-data-scrapper/meta-data-scrapper.module';
+import { FirecrawlScraperModule } from './firecrawl-scraper/firecrawl-scraper.module';
 
 @Module({
     imports: [
@@ -37,6 +38,7 @@ import { MetaDataScrapperModule } from './meta-data-scrapper/meta-data-scrapper.
         ReportModule,
         CommuneIndicatorModule,
         MetaDataScrapperModule,
+        FirecrawlScraperModule,
         ConfigModule.forRoot({
             isGlobal: true,
         }),

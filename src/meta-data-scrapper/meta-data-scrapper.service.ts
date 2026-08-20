@@ -4,8 +4,8 @@ import * as cheerio from 'cheerio';
 import { CheerioAPI } from 'cheerio';
 import { Browser, chromium, Page } from 'playwright';
 import { PropertyFeatures } from './interfaces/property-features.interface';
-import { PrismaService } from '../prisma/prisma.service';
-import { OpenaiService } from '../openai/openai.service';
+import { PrismaService } from '../services/prisma/prisma.service';
+import { OpenaiService } from '../services/openai/openai.service';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { ListingMetadata } from './interfaces/listing-metadata.interface';
@@ -16,7 +16,7 @@ type AnalysisDevice = 'mobile' | 'desktop';
 @Injectable()
 export class MetadataScraperService implements OnModuleDestroy {
     private readonly logger = new Logger(MetadataScraperService.name);
-    private readonly challengeTimeout = 5000;
+    private readonly challengeTimeout = 10000;
     private browser?: Browser;
 
     constructor(
@@ -195,6 +195,7 @@ export class MetadataScraperService implements OnModuleDestroy {
 
             locale: 'fr-FR',
             timezoneId: 'Europe/Paris',
+
             javaScriptEnabled: true,
 
             isMobile,
@@ -210,60 +211,128 @@ export class MetadataScraperService implements OnModuleDestroy {
         try {
             this.logger.log(`🌐 Navigation ${isMobile ? 'MOBILE' : 'DESKTOP'} : ${url}`);
 
-            await page.goto(url, {
+            /*
+             * --------------------------------------------------
+             * 1. NAVIGATION
+             * --------------------------------------------------
+             */
+
+            const response = await page.goto(url, {
                 waitUntil: 'domcontentloaded',
                 timeout: 15000,
             });
 
             this.logger.log(`⏱️ page.goto : ${Date.now() - start} ms`);
 
+            this.logger.log(`📡 HTTP status : ${response?.status() ?? 'unknown'}`);
+
             this.logger.log(`🌐 URL après navigation : ${page.url()}`);
+
             this.logger.log(`📄 TITLE : ${await page.title()}`);
 
-            // Petit délai uniquement
+            /*
+             * --------------------------------------------------
+             * 2. LAISSER LE JS INITIALISER LA PAGE
+             * --------------------------------------------------
+             */
+
             await page.waitForTimeout(500);
 
             let html = await page.content();
 
             this.logger.log(`⏱️ HTML initial : ${Date.now() - start} ms`);
 
+            /*
+             * --------------------------------------------------
+             * 3. DETECTION ANTI-BOT
+             * --------------------------------------------------
+             */
+
             if (this.isAntiBotPage(html)) {
                 this.logger.warn(`🛡️ Challenge anti-bot détecté`);
 
+                const challengeStart = Date.now();
+
                 const resolved = await this.waitForAntiBotResolution(page);
+
+                this.logger.log(`⏱️ Attente anti-bot : ${Date.now() - challengeStart} ms`);
 
                 if (!resolved) {
                     throw new Error('Challenge anti-bot non résolu');
                 }
+
+                /*
+                 * Important :
+                 * on récupère le HTML APRÈS résolution.
+                 */
+                html = await page.content();
+
+                this.logger.log(`🌐 URL après challenge : ${page.url()}`);
+
+                this.logger.log(`📄 TITLE après challenge : ${await page.title()}`);
             }
 
-            html = await page.content();
+            /*
+             * --------------------------------------------------
+             * 4. VALIDATION HTML FINAL
+             * --------------------------------------------------
+             */
 
             if (!html || html.length < 1000) {
                 throw new Error('HTML final invalide ou trop court');
             }
 
             if (this.isAntiBotPage(html)) {
-                throw new Error('Challenge anti-bot non résolu');
+                throw new Error('Challenge anti-bot toujours présent');
             }
 
             this.logger.log(`✅ HTML final récupéré : ${html.length} caractères`);
 
-            this.logger.log(`⏱️ TOTAL Playwright : ${Date.now() - start} ms`);
+            /*
+             * --------------------------------------------------
+             * 5. EXTRACTION
+             * --------------------------------------------------
+             */
+
+            const extractionStart = Date.now();
 
             const metadata = await this.extractMetadata(html, url);
+
+            this.logger.log(`⏱️ extractMetadata : ${Date.now() - extractionStart} ms`);
+
+            this.logger.log(`⏱️ TOTAL Playwright : ${Date.now() - start} ms`);
 
             return {
                 ...metadata,
                 source: 'playwright',
             };
         } finally {
-            await context.close();
+            /*
+             * --------------------------------------------------
+             * 6. CLEANUP
+             * --------------------------------------------------
+             */
+
+            try {
+                await page.close();
+            } catch (error) {
+                this.logger.warn(`⚠️ Impossible de fermer la page`);
+            }
+
+            try {
+                await context.close();
+            } catch (error) {
+                this.logger.warn(`⚠️ Impossible de fermer le context`);
+            }
+
+            this.logger.log(`🧹 Context Playwright fermé`);
         }
     }
 
     private async waitForAntiBotResolution(page: Page): Promise<boolean> {
-        this.logger.log(`⏳ Attente de résolution du challenge anti-bot...`);
+        const timeout = this.challengeTimeout;
+
+        this.logger.log(`⏳ Attente de résolution du challenge anti-bot (${timeout} ms)...`);
 
         try {
             await page.waitForFunction(
@@ -274,6 +343,12 @@ export class MetadataScraperService implements OnModuleDestroy {
 
                     const html = document.documentElement?.innerHTML?.toLowerCase() ?? '';
 
+                    /*
+                     * --------------------------------------------------
+                     * Challenge encore présent
+                     * --------------------------------------------------
+                     */
+
                     const challengeDetected =
                         title.includes('just a moment') ||
                         title.includes('datadome') ||
@@ -282,18 +357,54 @@ export class MetadataScraperService implements OnModuleDestroy {
                         html.includes('captcha-delivery.com') ||
                         html.includes('datadome');
 
-                    return !challengeDetected;
+                    if (challengeDetected) {
+                        return false;
+                    }
+
+                    /*
+                     * --------------------------------------------------
+                     * Page suffisamment chargée
+                     * --------------------------------------------------
+                     */
+
+                    const bodyLength = document.body?.innerText?.trim().length ?? 0;
+
+                    /*
+                     * On évite de considérer une page vide comme
+                     * une résolution du challenge.
+                     */
+
+                    return bodyLength > 200;
                 },
                 {
-                    timeout: this.challengeTimeout,
+                    timeout,
+                    polling: 250,
                 },
             );
 
-            this.logger.log(`✅ Challenge potentiellement résolu`);
+            /*
+             * Petit délai supplémentaire :
+             *
+             * Datadome peut avoir supprimé son challenge alors que
+             * le contenu de la page n'est pas encore complètement
+             * rendu.
+             */
+
+            await page.waitForTimeout(300);
+
+            const html = await page.content();
+
+            if (this.isAntiBotPage(html)) {
+                this.logger.warn(`⚠️ Challenge toujours détecté après attente`);
+
+                return false;
+            }
+
+            this.logger.log(`✅ Challenge anti-bot potentiellement résolu`);
 
             return true;
         } catch {
-            this.logger.warn(`⚠️ Challenge toujours présent après ${this.challengeTimeout / 1000}s`);
+            this.logger.warn(`⚠️ Challenge toujours présent après ${timeout / 1000}s`);
 
             return false;
         }
@@ -742,7 +853,7 @@ export class MetadataScraperService implements OnModuleDestroy {
         }
     }
 
-    private isValidResult(data: Omit<ListingMetadata, 'source'>): boolean {
+    private isValidResult(data: Partial<ListingMetadata>): boolean {
         return Boolean(data.title && (data.price || data.surface || data.description));
     }
 

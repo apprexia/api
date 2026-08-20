@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PropertyFeatures } from '../../../services/meta-data-scrapper/interfaces/property-features.interface';
+import { PropertyFeatures } from '../../../meta-data-scrapper/interfaces/property-features.interface';
 import { AmenityResult } from 'src/apprexia-engine/interfaces/amenity-result.interface';
 
 interface AmenityRule {

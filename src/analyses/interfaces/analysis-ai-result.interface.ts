@@ -1,4 +1,4 @@
-import { PropertyFeatures } from '../../services/meta-data-scrapper/interfaces/property-features.interface';
+import { PropertyFeatures } from '../../meta-data-scrapper/interfaces/property-features.interface';
 import { MarketPosition } from '../../apprexia-engine/interfaces/market-position.interface';
 import { CommuneAnalysis } from 'src/apprexia-engine/interfaces/commune-analysis.interface';
 import { EnergyScoreResult } from '../../apprexia-engine/engines/energy-engine/types/energy-score.types';

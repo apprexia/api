@@ -4,7 +4,7 @@ import { UpdateAnalysisDto } from './dto/update-analysis.dto';
 import { PrismaService } from '../services/prisma/prisma.service';
 import { AnalysesAiService } from '../services/analyses-ai/analyses-ai.service';
 import { AnalysisAiResult, Verdict } from './interfaces/analysis-ai-result.interface';
-import { MetadataScraperService } from '../services/meta-data-scrapper/meta-data-scrapper.service';
+import { MetadataScraperService } from '../meta-data-scrapper/meta-data-scrapper.service';
 import { UsersService } from 'src/users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { DvfService } from '../dvf/dvf.service';
@@ -21,7 +21,8 @@ import { LocationAnalysis, LocationEngineInput } from '../apprexia-engine/interf
 import { GeocodingProviderService } from '../apprexia-engine/providers/geocoding-provider/geocoding-provider.service';
 import { AmenityEngineService } from '../apprexia-engine/engines/amenity-engine/amenity-engine.service';
 import { CommuneIndicatorService } from '../commune-indicator/commune-indicator.service';
-import { ListingMetadata } from '../services/meta-data-scrapper/interfaces/listing-metadata.interface';
+import { ListingMetadata } from '../meta-data-scrapper/interfaces/listing-metadata.interface';
+import { FirecrawlScraperService } from '../firecrawl-scraper/firecrawl-scraper.service';
 
 @Injectable()
 export class AnalysesService {
@@ -31,6 +32,7 @@ export class AnalysesService {
         private prisma: PrismaService,
         private analysesAiService: AnalysesAiService,
         private metadataScraperService: MetadataScraperService,
+        private firecrawlScraperService: FirecrawlScraperService,
         private usersService: UsersService,
         private creditsService: CreditsService,
         private dvfService: DvfService,
@@ -55,28 +57,39 @@ export class AnalysesService {
     async create(dto: CreateAnalysisDto, userId: string) {
         await this.usersService.consumeCredit(userId);
 
-        const sourceSite = this.getSourceSite(dto.url);
+        const url = this.cleanUrl(dto.url);
+
+        const sourceSite = this.getSourceSite(url);
 
         const analysis = await this.prisma.analysis.create({
             data: {
                 userId,
-                url: dto.url,
+                url,
                 sourceSite,
                 status: AnalysisStatus.SCRAPING,
             },
         });
 
         try {
-            const metadata = await this.metadataScraperService.scrape(dto.url, dto.device ?? 'desktop');
+            this.logger.log(`🔎 Scraping [${sourceSite}] → ${url}`);
+
+            const metadata = await this.scrapeListing(url, dto.device ?? 'desktop');
+
+            this.logger.log(`✅ Scraping terminé [${sourceSite}]`);
 
             void this.processAnalysis(analysis.id, metadata);
         } catch (error) {
-            console.error(error);
+            this.logger.error(
+                `❌ Scraping échoué [${sourceSite}]`,
+                error instanceof Error ? error.stack : String(error),
+            );
 
             await this.prisma.analysis.update({
-                where: { id: analysis.id },
+                where: {
+                    id: analysis.id,
+                },
                 data: {
-                    status: 'SCRAPING_FAILED',
+                    status: AnalysisStatus.SCRAPING_FAILED,
                 },
             });
 
@@ -86,6 +99,37 @@ export class AnalysesService {
         return {
             id: analysis.id,
         };
+    }
+
+    private async scrapeListing(rawUrl: string, device: 'desktop' | 'mobile' = 'desktop'): Promise<ListingMetadata> {
+        const url = this.cleanUrl(rawUrl);
+        const sourceSite = this.getSourceSite(url);
+
+        const firecrawlSites = ['leboncoin', 'seloger', 'logicimmo'];
+
+        if (firecrawlSites.includes(sourceSite)) {
+            try {
+                this.logger.log(`🔥 Firecrawl → ${sourceSite}`);
+
+                const metadata = await this.firecrawlScraperService.scrape(url);
+
+                this.logger.log(`✅ Firecrawl réussi → ${sourceSite}`);
+
+                return metadata;
+            } catch (error) {
+                this.logger.warn(`⚠️ Firecrawl échoué → ${sourceSite}`);
+
+                this.logger.warn(error instanceof Error ? error.message : String(error));
+
+                this.logger.log(`🕷️ Fallback MetadataScraperService → ${sourceSite}`);
+
+                return await this.metadataScraperService.scrape(url, device);
+            }
+        }
+
+        this.logger.log(`🕷️ MetadataScraperService → ${sourceSite}`);
+
+        return await this.metadataScraperService.scrape(url, device);
     }
 
     private async processAnalysis(analysisId: string, metadata: ListingMetadata) {
@@ -679,13 +723,22 @@ export class AnalysesService {
         try {
             const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
 
+            if (hostname === 'leboncoin.fr' || hostname.endsWith('.leboncoin.fr')) {
+                return 'leboncoin';
+            }
+
+            if (hostname === 'seloger.com' || hostname.endsWith('.seloger.com')) {
+                return 'seloger';
+            }
+
+            if (hostname === 'logic-immo.com' || hostname.endsWith('.logic-immo.com')) {
+                return 'logicimmo';
+            }
+
             const sources: Record<string, string> = {
                 'pap.fr': 'pap',
-                'leboncoin.fr': 'leboncoin',
-                'seloger.com': 'seloger',
                 'bienici.com': 'bienici',
                 'ladresse.com': 'ladresse',
-                'logic-immo.com': 'logicimmo',
                 'orpi.com': 'orpi',
                 'century21.fr': 'century21',
                 'paruvendu.fr': 'paruvendu',

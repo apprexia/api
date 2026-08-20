@@ -2,7 +2,7 @@ import { AnalysisAiResult } from '../../analyses/interfaces/analysis-ai-result.i
 import { DvfMarketData } from '../../analyses/interfaces/dvf-market-data.interface';
 import { ApprexiaMarketData } from '../../analyses/interfaces/apprexia-market-data.interface';
 import { CommuneIndicator } from '@prisma/client';
-import { ListingMetadata } from '../../services/meta-data-scrapper/interfaces/listing-metadata.interface';
+import { ListingMetadata } from '../../meta-data-scrapper/interfaces/listing-metadata.interface';
 
 export interface EngineContext {
     metadata: ListingMetadata;
