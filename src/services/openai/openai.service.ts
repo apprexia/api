@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ApprexiaMarketData } from '../../analyses/interfaces/apprexia-market-data.interface';
 import { DvfMarketData } from '../../analyses/interfaces/dvf-market-data.interface';
-import { RentalResult } from '../../analyses/interfaces/rental-result.interface';
 import { LocationAnalysis } from '../../apprexia-engine/interfaces/location-analysis.interface';
 import { CommuneIndicator } from '@prisma/client';
 import { PropertyFeatures } from '../../meta-data-scrapper/interfaces/property-features.interface';
@@ -20,7 +19,6 @@ export class OpenaiService {
         metadata: ListingMetadata,
         marketData?: DvfMarketData | null,
         apprexiaMarketData?: ApprexiaMarketData | null,
-        rentalData?: RentalResult | null,
         locationAnalysis?: LocationAnalysis | null,
         communeIndicator?: CommuneIndicator | null,
     ) {
@@ -292,56 +290,6 @@ export class OpenaiService {
     
     `;
 
-        const rentalInfo = rentalData
-            ? `
-    
-    DONNÉES RENTAL ENGINE
-    (Estimation locative)
-    
-    
-    Loyer mensuel estimé :
-    ${rentalData.estimatedRentMonthly} €
-    
-    
-    Fourchette basse :
-    ${rentalData.estimatedRentLow} €
-    
-    
-    Fourchette haute :
-    ${rentalData.estimatedRentHigh} €
-    
-    
-    Prix au m² locatif :
-    ${rentalData?.rentPerSquareMeter != null ? rentalData.rentPerSquareMeter.toFixed(2) : 'N/A'} €/m²
-    
-    
-    Confiance estimation :
-    ${rentalData.rentConfidence !== null ? Math.round(rentalData.rentConfidence) : 'N/A'} %
-    
-    
-    Rendement brut calculé :
-    ${rentalData.grossYield} %
-    
-    
-    Niveau rendement :
-    ${rentalData.yieldLevel}
-    
-    
-    IMPORTANT :
-    
-    Utilise ces données pour expliquer la rentabilité.
-    
-    Ne recalcule jamais le loyer.
-    
-    Ne modifie jamais grossYield.
-    
-    `
-            : `
-    DONNÉES RENTAL :
-    
-    Aucune estimation locative disponible.
-    `;
-
         const locationInfo = locationAnalysis
             ? `
     DONNÉES LOCATION ENGINE
@@ -441,6 +389,7 @@ export class OpenaiService {
     
     Aucune donnée locale disponible.
     `;
+        const start = Date.now();
 
         const response = await this.openAI.responses.create({
             model: 'gpt-5-mini',
@@ -595,8 +544,6 @@ export class OpenaiService {
     ${marketInfo}
     
     ${apprexiaInfo}
-    
-    ${rentalInfo}
     
     ${locationInfo}
     
@@ -1606,6 +1553,7 @@ export class OpenaiService {
     Ne retourne jamais de texte avant ou après le JSON.
     `,
         });
+        this.logger.log(`analyze GPT-5-mini: ${Date.now() - start}ms`);
         return response.output_text;
     }
 

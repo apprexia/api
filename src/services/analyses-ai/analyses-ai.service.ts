@@ -16,7 +16,6 @@ export class AnalysesAiService {
         metadata: ListingMetadata,
         marketData?: DvfMarketData | null,
         apprexiaMarketData?: ApprexiaMarketData | null,
-        rentalData?: RentalResult | null,
         locationAnalysis?: LocationAnalysis | null,
         communeIndicator?: CommuneIndicator | null,
     ): Promise<AnalysisAiResult> {
@@ -24,7 +23,6 @@ export class AnalysesAiService {
             metadata,
             marketData,
             apprexiaMarketData,
-            rentalData,
             locationAnalysis,
             communeIndicator,
         );

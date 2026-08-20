@@ -14,6 +14,7 @@ import { RentalMarketModule } from '../rental-market/rental-market.module';
 import { CommuneIndicatorService } from '../commune-indicator/commune-indicator.service';
 import { HttpModule } from '@nestjs/axios';
 import { FirecrawlScraperModule } from '../firecrawl-scraper/firecrawl-scraper.module';
+import { MetaDataScrapperModule } from '../meta-data-scrapper/meta-data-scrapper.module';
 
 @Module({
     imports: [
@@ -24,13 +25,13 @@ import { FirecrawlScraperModule } from '../firecrawl-scraper/firecrawl-scraper.m
         ApprexiaEngineModule,
         RentalMarketModule,
         FirecrawlScraperModule,
+        MetaDataScrapperModule,
     ],
     controllers: [AnalysesController],
     providers: [
         AnalysesService,
         AnalysesAiService,
         OpenaiService,
-        MetadataScraperService,
         AnalysisMarketService,
         RentalEngineService,
         CommuneIndicatorService,

@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
-import { MetadataPreviewService } from './metadata-preview/metadata-preview.service';
-import { MetadataPreviewController } from './metadata-preview/metadata-preview.controller';
+import { MetadataScraperService } from './meta-data-scrapper.service';
+import { OpenaiService } from '../services/openai/openai.service';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
-    providers: [MetadataPreviewService],
-    controllers: [MetadataPreviewController],
+    imports: [HttpModule],
+    providers: [MetadataScraperService, OpenaiService],
+    exports: [MetadataScraperService],
+    controllers: [],
 })
 export class MetaDataScrapperModule {}

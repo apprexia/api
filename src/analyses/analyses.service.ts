@@ -135,7 +135,6 @@ export class AnalysesService {
     private async processAnalysis(analysisId: string, metadata: ListingMetadata) {
         const defaultImg = 'images/placeholder.png';
         let aiResult: AnalysisAiResult;
-        let rentalData: RentalResult | null = null;
         let marketData: DvfMarketData | null = null;
         let locationData: LocationEngineInput | null = null;
         let locationAnalysis: LocationAnalysis | null = null;
@@ -333,23 +332,24 @@ export class AnalysesService {
                 },
             });
 
+            const startAi = Date.now();
+
             aiResult = await this.analysesAiService.analyze(
                 metadata,
                 marketData,
                 apprexiaMarketData,
-                rentalData,
                 locationAnalysis,
                 communeIndicator,
             );
+            this.logger.log(`🤖 OpenAI analyse terminé en ${Date.now() - startAi} ms`);
 
             // =========================
             // AMENITIES ENGINE
             // =========================
-
+            const startAmenities = Date.now();
             const amenityAnalysis = this.amenityEngine.compute(metadata.propertyFeatures, metadata.surface);
-
-            aiResult.propertyFeatures = metadata.propertyFeatures;
-
+            this.logger.log(`🏠 Amenities terminé en ${Date.now() - startAmenities} ms`);
+            const startEngine = Date.now();
             aiResult = await this.apprexiaEngineService.evaluate({
                 metadata,
                 analysis: aiResult,
@@ -358,8 +358,9 @@ export class AnalysesService {
                 commune: communeIndicator,
                 date: new Date(),
             });
-
+            aiResult.propertyFeatures = metadata.propertyFeatures;
             aiResult.amenities = amenityAnalysis;
+            this.logger.log(`⚙️ ApprexiaEngine terminé en ${Date.now() - startEngine} ms`);
 
             // -------------------------
             // ÉTAPE 5B : RÈGLES MÉTIER
