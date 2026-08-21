@@ -19,6 +19,7 @@ export class CreateManualAnalysisDto {
     etage?: number;
 
     dpe: string;
+    ges: string;
 
     propertyFeatures: PropertyFeatures;
 

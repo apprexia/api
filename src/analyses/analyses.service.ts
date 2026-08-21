@@ -105,7 +105,7 @@ export class AnalysesService {
         const url = this.cleanUrl(rawUrl);
         const sourceSite = this.getSourceSite(url);
 
-        const firecrawlSites = ['leboncoin', 'seloger', 'logicimmo'];
+        const firecrawlSites = ['leboncoin', 'bienici', 'seloger', 'logicimmo'];
 
         if (firecrawlSites.includes(sourceSite)) {
             try {
@@ -675,6 +675,7 @@ export class AnalysesService {
             floor: dto.etage ?? null,
             condition: dto.etat,
             dpe: dto.dpe,
+            ges: dto.ges,
             propertyFeatures: dto.propertyFeatures,
 
             price: dto.prix,
@@ -728,6 +729,10 @@ export class AnalysesService {
                 return 'leboncoin';
             }
 
+            if (hostname === 'bienici.com' || hostname.endsWith('.bienici.com')) {
+                return 'bienici';
+            }
+
             if (hostname === 'seloger.com' || hostname.endsWith('.seloger.com')) {
                 return 'seloger';
             }
@@ -738,7 +743,6 @@ export class AnalysesService {
 
             const sources: Record<string, string> = {
                 'pap.fr': 'pap',
-                'bienici.com': 'bienici',
                 'ladresse.com': 'ladresse',
                 'orpi.com': 'orpi',
                 'century21.fr': 'century21',
