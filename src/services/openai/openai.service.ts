@@ -68,8 +68,7 @@ export class OpenaiService {
     
     EVITER :
     ${apprexiaMarketData.eviter}
-    
-    
+
     UTILISATION DES DONNÉES APPREXIA :
     
     Ces données représentent des analyses déjà réalisées
@@ -97,20 +96,16 @@ export class OpenaiService {
     
     DONNÉES DVF
     (Ventes immobilières réellement enregistrées)
-    
-    
+
     Nombre de transactions comparables :
     ${marketData.count}
-    
-    
+
     Prix moyen constaté :
     ${marketData.averagePriceM2} €/m²
-    
-    
+
     Prix médian :
     ${marketData.medianPriceM2} €/m²
-    
-    
+
     Prix ajusté selon modèle :
     ${marketData.adjustedPriceM2} €/m²
     
@@ -122,15 +117,12 @@ export class OpenaiService {
     
     Valeur estimée DVF :
     ${marketData.dvfReferenceValue} €
-    
-    
+
     Fourchette basse :
     ${marketData.lowEstimate} €
-    
-    
+
     Fourchette haute :
     ${marketData.highEstimate} €
-    
     
     Niveau de confiance :
     ${marketData.confidence}%
@@ -139,56 +131,42 @@ export class OpenaiService {
     CALCUL AUTOMATIQUE DES ÉCARTS DE PRIX
     ──────────────────────────────
     
-    
     Les valeurs suivantes ont été calculées par Apprexia.
-    
     Tu ne dois jamais recalculer ces pourcentages.
     
-    
     Prix demandé :
-    
     ${priceAnalysis?.askingPrice} €
     
-    
     Écart avec valeur centrale DVF :
-    
     ${priceAnalysis?.amountVsDvf} €
-    
     ${priceAnalysis?.gapVsDvfPercent}%
     
-    
     Écart avec borne basse DVF :
-    
     ${priceAnalysis?.amountVsLow} €
-    
     ${priceAnalysis?.gapVsLowPercent}%
     
     
     Écart avec borne haute DVF :
-    
     ${priceAnalysis?.amountVsHigh} €
-    
     ${priceAnalysis?.gapVsHighPercent}%
     
     
     Position calculée :
-    
     ${priceAnalysis?.position}
     
-    
-    INTERPRÉTATION OBLIGATOIRE :
-    
-    - gapVsDvfPercent négatif = prix inférieur à la valeur centrale DVF
-    - gapVsDvfPercent positif = prix supérieur à la valeur centrale DVF
-    
-    Utilise ces valeurs pour déterminer :
-    
-    - marketPosition
-    - verdict
-    - score
-    - negotiationAmount
-    
-    Ne fais aucun nouveau calcul.
+──────────────────────────────
+INTERPRÉTATION OBLIGATOIRE
+──────────────────────────────
+
+- gapVsDvfPercent négatif = prix inférieur à la valeur centrale DVF
+- gapVsDvfPercent positif = prix supérieur à la valeur centrale DVF
+
+Utilise directement ces valeurs pour déterminer :
+
+- marketPosition
+- negotiationAmount
+
+Ne fais aucun nouveau calcul de gapVsDvfPercent.
     
     INTERPRÉTATION DVF :
     
@@ -252,19 +230,13 @@ export class OpenaiService {
     Analyse obligatoirement :
     
     1. L'écart entre prix demandé et adjustedPriceM2 × surface.
-    
     2. L'écart entre prix demandé et dvfReferenceValue.
-    
     3. Le positionnement dans la fourchette DVF.
-    
     4. Si les prestations réelles justifient un positionnement proche de highEstimate.
-    
     5. Le montant de négociation nécessaire pour revenir vers une valeur cohérente.
     
     La probabilité d'obtenir cette baisse est un élément différent.
-    
     Une négociation importante peut être nécessaire mais difficile à obtenir.
-    
     Explique cette différence dans negotiationAnalysis.
     `
             : `
@@ -307,15 +279,11 @@ export class OpenaiService {
     IMPORTANT :
     
     Un score de localisation moyen ne doit pas automatiquement devenir un risque.
-    
     Utilise uniquement les faiblesses explicites du Location Engine.
-    
     Ne transforme pas un score global en risque.
-    
     Ces données servent à évaluer l'attractivité de la localisation.
     
     Elles peuvent influencer :
-    
     - le score localisation (20%)
     - les forces
     - les risques
@@ -395,22 +363,21 @@ export class OpenaiService {
             model: 'gpt-5-mini',
 
             input: `
-    Tu es un expert immobilier spécialisé dans l'investissement locatif en France.
-    
-    Ton rôle est de produire une analyse immobilière professionnelle comparable à celle d'un expert immobilier.
-    
-    Tu dois toujours raisonner dans cet ordre :
-    
-    1. Comprendre le bien.
-    2. Estimer sa valeur de marché.
-    3. Comparer cette valeur au prix demandé.
-    4. Évaluer les prestations.
-    5. Évaluer les risques.
-    6. Calculer le score.
-    7. Déterminer le verdict.
-    
+Ton rôle est de produire une analyse immobilière professionnelle comparable à celle d'un expert immobilier.
+
+Tu dois toujours raisonner dans cet ordre :
+
+1. Comprendre le bien.
+2. Estimer sa valeur de marché.
+3. Comparer cette valeur au prix demandé.
+4. Évaluer les prestations.
+5. Évaluer les risques.
+
+L'analyse doit s'appuyer en priorité sur les données objectives fournies par les différents moteurs Apprexia.
+Ne remplace jamais une donnée calculée par une estimation subjective lorsque celle-ci est disponible.
+Lorsque plusieurs sources sont disponibles, privilégie les données les plus précises et les plus directement liées au bien analysé.
+Une information inconnue ne doit pas être considérée automatiquement comme un défaut.
       
-    
     ──────────────────────────────
     ANNONCE
     ──────────────────────────────
@@ -511,7 +478,6 @@ export class OpenaiService {
     
     - ajuster la valeur du bien dans la fourchette DVF ;
     - expliquer la valorisation du bien ;
-    - calculer le score ;
     - justifier le verdict ;
     - expliquer le prix conseillé.
     
@@ -664,84 +630,106 @@ export class OpenaiService {
     
     Si aucune donnée Apprexia n'est disponible, ne fais aucune supposition à partir d'Apprexia et n'y fais pas référence dans les explications.
     
-    ──────────────────────────────
-    CALCUL DU SCORE
-    ──────────────────────────────
-    
-    Le score représente l'intérêt d'acheter ce bien aujourd'hui.
-    
-    Il ne mesure PAS uniquement la qualité du logement.
-    
-    Le score est calculé selon :
-    
-    Prix / Opportunité : 40 %
-    
-    Localisation : 20 %
-    
-    Prestations : 15 %
-    
-    Potentiel locatif : 10 %
-    
-    Probabilité d'obtenir la négociation : 10 %
-    
-    Risques : 5 %
-    
-    LOCALISATION :
-    
-    Le critère localisation doit utiliser prioritairement les données LOCATION ENGINE.
-    
-    Si Location Engine est disponible :
-    
-    - utilise son score localisation ;
-    - utilise ses forces et faiblesses ;
-    - explique son impact sur l'attractivité du bien.
-    
-    Ne pénalise jamais une localisation uniquement parce qu'une information est inconnue.
-    
-    Une donnée inconnue ≠ un défaut.
-    
-    Le critère le plus important est toujours le rapport entre le prix demandé et la valeur estimée.
-    
-    RÈGLES OBLIGATOIRES
-    
-    Si askingPrice est inférieur à estimatedValueLow de plus de 30 % :
-    → score minimum = 90
-    
-    Si askingPrice est inférieur à estimatedValueLow de 20 à 30 % :
-    → score minimum = 85
-    
-    Si askingPrice est inférieur de plus de 40 % à estimatedValueLow
-    → score minimum = 90
-    
-    Si askingPrice est inférieur à estimatedValueLow :
-    → score minimum = 80
-    
-    askingPrice = prix affiché fourni dans l'annonce.
-    
-    Ne jamais modifier cette valeur.
-    
-    L'absence d'ascenseur, de terrasse, de balcon ou de vue mer ne peut jamais faire perdre plus de 10 points au total.
-    
-    Le rendement locatif ne peut jamais faire perdre plus de 5 points.
-    
-    Un bien très sous-évalué doit toujours obtenir un score élevé, même si ses prestations sont simples.
-    
-    Lorsque askingPrice dépasse estimatedValueHigh :
-    
-    Si la surcote est inférieure à 5 % :
-    → score généralement compris entre 65 et 80.
-    
-    Si la surcote est comprise entre 5 % et 15 % :
-    → score généralement compris entre 50 et 70.
-    
-    Si la surcote est comprise entre 15 % et 30 % :
-    → score généralement compris entre 30 et 55.
-    
-    Si la surcote dépasse 30 % :
-    → score généralement compris entre 0 et 40.
-    
-    Les prestations réellement présentes peuvent déplacer le score à l'intérieur de cette plage mais ne doivent généralement pas en sortir.
-    
+──────────────────────────────
+CALCUL DU SCORE
+──────────────────────────────
+
+Le score représente l'intérêt global d'acheter ce bien aujourd'hui.
+
+Il ne mesure pas uniquement la qualité du logement.
+
+Le score doit synthétiser les différents indicateurs disponibles selon les pondérations suivantes :
+
+Prix / Opportunité : 40 %
+Localisation : 20 %
+Prestations : 15 %
+Potentiel locatif : 10 %
+Probabilité de négociation : 10 %
+Risques : 5 %
+
+PRINCIPES DE CALCUL
+
+Le rapport entre le prix demandé et la valeur estimée constitue le facteur le plus important du score.
+
+Compare toujours :
+
+* askingPrice
+* estimatedValueLow
+* estimatedValue
+* estimatedValueHigh
+
+askingPrice correspond strictement au prix affiché dans l'annonce.
+Ne jamais modifier, recalculer ou interpréter différemment cette valeur.
+Un bien significativement sous-évalué par rapport à sa valeur estimée doit fortement améliorer le score.
+Un bien significativement surévalué par rapport à sa valeur estimée doit fortement réduire le score.
+Plus l'écart entre le prix demandé et la valeur estimée est important, plus son impact sur le score doit être important.
+Le score final ne doit cependant jamais être déterminé exclusivement par le prix. Les autres critères doivent également être pris en compte.
+
+LOCALISATION
+
+Le critère localisation doit utiliser prioritairement les données LOCATION ENGINE.
+Si Location Engine est disponible :
+
+* utilise son score de localisation ;
+* utilise ses forces et faiblesses ;
+* explique leur impact sur l'attractivité du bien ;
+* prends en compte les éléments de proximité et les indicateurs territoriaux disponibles.
+
+Une donnée inconnue ne constitue pas automatiquement un défaut.
+
+Ne pénalise jamais une localisation uniquement parce qu'une information est absente ou inconnue.
+
+PRESTATIONS
+
+Les prestations doivent être évaluées en fonction :
+
+* du type de bien ;
+* de sa surface ;
+* de son positionnement ;
+* de son prix ;
+* du marché local ;
+* des caractéristiques réellement présentes dans l'annonce.
+
+Ne pénalise pas automatiquement un bien pour l'absence d'une prestation qui n'est pas particulièrement pertinente pour ce type de bien.
+Une terrasse, un balcon, un ascenseur, une vue, un parking ou toute autre prestation doit être évalué selon son importance réelle pour le bien analysé.
+
+POTENTIEL LOCATIF
+
+Le potentiel locatif doit être évalué à partir des données de Rental Engine lorsqu'elles sont disponibles.
+Prends notamment en compte :
+
+* le loyer estimé ;
+* le rendement locatif ;
+* la demande locative ;
+* le type de bien ;
+* le marché locatif local.
+
+Le potentiel locatif doit influencer le score proportionnellement à sa pertinence pour le bien analysé.
+
+PROBABILITÉ DE NÉGOCIATION
+
+La probabilité de négociation doit tenir compte notamment :
+
+* de l'écart entre le prix demandé et la valeur estimée ;
+* du niveau de surévaluation éventuel ;
+* des caractéristiques du bien ;
+* des conditions du marché ;
+* des éléments présents dans l'annonce pouvant justifier une négociation.
+
+RISQUES
+
+Les risques doivent être évalués à partir des données disponibles.
+Ne crée jamais un risque qui n'est pas supporté par les données fournies.
+Une information inconnue ne doit pas automatiquement être considérée comme un risque.
+
+COHÉRENCE DU SCORE
+
+Le score doit rester cohérent avec les données objectives fournies par les différents moteurs.
+Ne force jamais artificiellement le score vers une valeur minimale ou maximale en raison d'une seule règle.
+Un bien présentant une forte opportunité de prix peut obtenir un score élevé malgré des prestations simples si les autres indicateurs restent favorables.
+À l'inverse, un prix attractif ne doit pas masquer des risques importants, une localisation défavorable ou un potentiel locatif faible.
+Le score final doit représenter une synthèse équilibrée des indicateurs disponibles et refléter l'intérêt réel du bien pour un acheteur aujourd'hui.
+
     ──────────────────────────────
     RISQUE
     ──────────────────────────────
@@ -1121,43 +1109,36 @@ export class OpenaiService {
     
     Ne classe pas automatiquement un bien en EVITER uniquement parce que askingPrice dépasse légèrement estimatedValueHigh.
     
-    ──────────────────────────────
-    VERDICT
-    ──────────────────────────────
-    
-    Le verdict doit être déterminé principalement par :
-    
-    1. L'écart entre askingPrice et dvfReferenceValue.
-    2. La position dans la fourchette DVF.
-    3. Les prestations réellement présentes.
-    4. Les risques identifiés.
-    
-    L'écart DVF calculé par Apprexia est fourni dans les données DVF :
-    
-    gapVsDvfPercent
-    
-    Cette valeur est calculée par le backend.
-    
-    NE JAMAIS recalculer cette valeur.
-    
-    Utilise directement gapVsDvfPercent pour appliquer les règles de verdict.
-    
-    
+──────────────────────────────
+VERDICT APPREXIA ENGINE
+──────────────────────────────
+
+Le verdict final est calculé par Apprexia Engine.
+Tu ne dois jamais recalculer, modifier ou remplacer ce verdict.
+Utilise le verdict fourni par Apprexia Engine comme résultat officiel de l'analyse.
+Ton rôle est uniquement d'expliquer ce verdict de manière cohérente avec :
+
+- le prix demandé ;
+- la valeur DVF ;
+- la position du bien sur le marché ;
+- les prestations réellement présentes ;
+- les risques identifiés ;
+- les données Apprexia ;
+- les données Location Engine.
+
+L'explication du verdict doit être cohérente avec les données fournies et ne doit jamais contredire le verdict calculé par Apprexia Engine.
+
     ──────────────────────────────
     CAS 1 : OPPORTUNITÉ
     ──────────────────────────────
     
     Si :
-    
     écartDVF <= -10 %
     
     Alors :
-    
     verdict = INVESTIR
     
-    
     Le prix est significativement inférieur à la valeur réelle du marché.
-    
     
     ──────────────────────────────
     CAS 2 : PRIX ATTRACTIF OU COHÉRENT
@@ -1249,32 +1230,14 @@ export class OpenaiService {
     Un prix inférieur ou égal à dvfReferenceValue
     ne nécessite pas de négociation sauf élément particulier.
     
-    ──────────────────────────────
-    COHÉRENCE OBLIGATOIRE
-    ──────────────────────────────
-    
-    Le verdict doit rester cohérent avec score :
-    
-    INVESTIR :
-    Score >= 80
-    
-    FAVORABLE :
-    Score >= 65
-    
-    NEGOCIER :
-    Score >= 50
-    
-    EVITER :
-    Score < 50
-    
-    
-    Une information inconnue ne doit jamais être considérée comme négative.
-    
-    "Inconnu" ≠ "défavorable".
-    
-    L'absence d'information sur un équipement ne constitue jamais un risque.
-    
-    Seules les informations présentes dans l'annonce ou démontrées par les données DVF/Apprexia peuvent influencer le verdict.
+──────────────────────────────
+COHÉRENCE OBLIGATOIRE
+──────────────────────────────
+
+Une information inconnue ne doit jamais être considérée comme négative.
+"Inconnu" ≠ "défavorable".
+L'absence d'information sur un équipement ne constitue pas un risque.
+Seules les informations présentes dans l'annonce ou démontrées par les données DVF/Apprexia peuvent influencer l'analyse.
     
     ──────────────────────────────
     RÈGLE ABSOLUE RECOMMENDED PRICE
@@ -1498,53 +1461,50 @@ export class OpenaiService {
     FORMAT JSON OBLIGATOIRE
     ──────────────────────────────
     
-    {
-    "title": "",
-    "description": "",
-    "imageUrl": "",
-    "city": "",
-    "rooms": 0,
-    "dpe": null,
-    "ges": null,
-    "surface": 0,
-    
-    "score": 0,
-    "scoreExplanation": "",
-    
-    "verdict": "",
-    "verdictExplanation": "",
-    
-    "estimatedValueLow": null,
-    "estimatedValueHigh": null,
-    "dvfReferenceValue": null,
-    
-    "askingPrice": 0,
-    
-    "recommendedPrice": 0,
-    
-    "negotiationAmount": 0,
-    "negotiationPotential": 0,
-    "negotiationAnalysis": "",
-    
-    "marketPosition": "",
-    "marketAdjustment": "",
-    
-    "riskLevel": 0,
-    
-    "estimatedRentMonthly": null,
-    "estimatedRentLow": null,
-    "estimatedRentHigh": null,
-    "rentPerSquareMeter": null,
-    "rentConfidence": null,
-    
-    "grossYield": null,
-    "yieldLevel": null,
-    "yieldAnalysis": "",
-    
-    "strengths": [],
-    
-    "risks": []
-    }
+{
+  "title": "",
+  "description": "",
+  "imageUrl": "",
+  "city": "",
+  "rooms": 0,
+  "dpe": null,
+  "ges": null,
+  "surface": 0,
+  
+  "scoreExplanation": "",
+  "verdictExplanation": "",
+
+  "estimatedValueLow": null,
+  "estimatedValueHigh": null,
+  "dvfReferenceValue": null,
+
+  "askingPrice": 0,
+
+  "recommendedPrice": 0,
+
+  "negotiationAmount": 0,
+  "negotiationPotential": 0,
+  "negotiationAnalysis": "",
+
+  "marketPosition": "",
+  "marketAdjustment": "",
+
+  "riskLevel": 0,
+
+  "estimatedRentMonthly": null,
+  "estimatedRentLow": null,
+  "estimatedRentHigh": null,
+  "rentPerSquareMeter": null,
+  "rentConfidence": null,
+
+  "grossYield": null,
+  "yieldLevel": null,
+  "yieldAnalysis": "",
+
+  "strengths": [],
+
+  "risks": []
+}
     
     Retourne uniquement ce JSON.
     
@@ -1645,13 +1605,13 @@ export class OpenaiService {
         
             Ton rôle est de :
         
-              1. rechercher activement les informations importantes dans l'annonce ;
+            1. rechercher activement les informations importantes dans l'annonce ;
             2. vérifier les valeurs déjà extraites ;
             3. corriger uniquement lorsqu'une preuve explicite existe ;
             4. extraire le DPE et le GES lorsqu'ils sont explicitement présents ;
             5. ne jamais inventer une information absente.
         
-        ════════════════════════════════════
+════════════════════════════════════
 PRIORITÉ ABSOLUE — DPE / GES
 ════════════════════════════════════
 
