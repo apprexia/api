@@ -14,7 +14,7 @@ export class ReportController {
     @Get(':id/report')
     @UseGuards(AuthGuard('jwt'))
     async generateReport(@Param('id') id: string, @Req() req, @Res() res: Response) {
-        const userId = req.user.id;
+        const userId = req.user.sub;
 
         const analysis = await this.analysisService.findOne(id, userId);
 

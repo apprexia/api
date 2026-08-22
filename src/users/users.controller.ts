@@ -10,7 +10,7 @@ export class UsersController {
     @Get('me')
     @UseGuards(AuthGuard('jwt'))
     me(@Req() req) {
-        return this.usersService.me(req.user.id);
+        return this.usersService.me(req.user.sub);
     }
 
     @Get('me/credits')
