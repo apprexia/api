@@ -18,12 +18,10 @@ export class AuthService {
     async generateJwt(user: any) {
         return this.jwtService.signAsync({
             sub: user.id,
-
             email: user.email,
-
             name: user.name,
-
             avatar: user.avatar,
+            role: user.role,
         });
     }
 

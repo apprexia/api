@@ -21,6 +21,7 @@ import { CommuneIndicatorModule } from './commune-indicator/commune-indicator.mo
 import { ConfigModule } from '@nestjs/config';
 import { MetaDataScrapperModule } from './meta-data-scrapper/meta-data-scrapper.module';
 import { FirecrawlScraperModule } from './firecrawl-scraper/firecrawl-scraper.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
     imports: [
@@ -42,7 +43,7 @@ import { FirecrawlScraperModule } from './firecrawl-scraper/firecrawl-scraper.mo
         ConfigModule.forRoot({
             isGlobal: true,
         }),
-        MetaDataScrapperModule,
+        AdminModule,
     ],
     controllers: [AppController],
     providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService, ReportService],
