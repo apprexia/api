@@ -22,6 +22,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MetaDataScrapperModule } from './meta-data-scrapper/meta-data-scrapper.module';
 import { FirecrawlScraperModule } from './firecrawl-scraper/firecrawl-scraper.module';
 import { AdminModule } from './admin/admin.module';
+import { ProjectEstimateModule } from './project-estimate/project-estimate.module';
 
 @Module({
     imports: [
@@ -44,6 +45,7 @@ import { AdminModule } from './admin/admin.module';
             isGlobal: true,
         }),
         AdminModule,
+        ProjectEstimateModule,
     ],
     controllers: [AppController],
     providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService, ReportService],

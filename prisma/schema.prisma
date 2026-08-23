@@ -26,9 +26,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  analyses     Analysis[]
-  favorites    Favorite[]
-  transactions CreditTransaction[]
+  analyses        Analysis[]
+  favorites       Favorite[]
+  transactions    CreditTransaction[]
+  ProjectEstimate ProjectEstimate?
 }
 
 enum UserRole {
@@ -288,4 +289,26 @@ model LocationCache {
   updatedAt DateTime @updatedAt
 
   @@unique([city, codePostal, latitude, longitude, radius])
+}
+
+model ProjectEstimate {
+  id String @id @default(uuid())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  monthlyIncome  Int
+  monthlyCredits Int @default(0)
+  downPayment    Int @default(0)
+  householdSize  Int @default(1)
+  loanDuration   Int
+
+  borrowingCapacity Int
+  monthlyPayment    Int
+  minBudget         Int
+  maxBudget         Int
+  targetBudget      Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
