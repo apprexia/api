@@ -572,11 +572,13 @@ export class AnalysesService {
         };
     }
 
-    findOne(id: string, userId: string) {
+    findOne(id: string, userId: string, role: string) {
         return this.prisma.analysis.findFirst({
             where: {
                 id,
-                userId,
+                ...(role !== 'ADMIN' && {
+                    userId,
+                }),
             },
 
             include: {

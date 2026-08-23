@@ -52,7 +52,7 @@ export class AnalysesController {
     @Get(':id')
     @UseGuards(AuthGuard('jwt'))
     findOne(@Param('id') id: string, @Req() req) {
-        return this.analysesService.findOne(id, req.user.sub);
+        return this.analysesService.findOne(id, req.user.sub, req.user.role);
     }
 
     @Patch(':id')
