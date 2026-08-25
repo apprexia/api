@@ -51,14 +51,21 @@ export class CommuneIndicatorService {
         // 2. RECHERCHE PAR NOM DE COMMUNE
         // =====================================================
 
-        const communes = await this.prisma.communeIndicator.findMany({
+        const cityVariants = this.getCityVariants(cleanCity);
+
+        console.log('🏙️ COMMUNE VARIANTS', cityVariants);
+
+        let communes = await this.prisma.communeIndicator.findMany({
             where: {
-                commune: cleanCity,
+                commune: {
+                    in: cityVariants,
+                },
             },
         });
 
         console.log('COMMUNE MATCHES', {
             city: cleanCity,
+            variants: cityVariants,
             count: communes.length,
             communes: communes.map((c) => ({
                 codeInsee: c.codeInsee,
@@ -68,13 +75,63 @@ export class CommuneIndicatorService {
         });
 
         // =====================================================
-        // 3. AUCUNE COMMUNE
+        // 3. SI AUCUNE COMMUNE → FALLBACK AVEC DÉPARTEMENT
         // =====================================================
 
-        if (communes.length === 0) {
-            console.warn(`⚠️ Aucune commune trouvée pour "${cleanCity}"`);
+        if (communes.length === 0 && codePostal) {
+            const cp = codePostal.replace(/\s/g, '');
 
-            return null;
+            let codeDepartement: string | null = null;
+
+            if (/^\d{5}$/.test(cp)) {
+                // DOM
+                if (
+                    cp.startsWith('971') ||
+                    cp.startsWith('972') ||
+                    cp.startsWith('973') ||
+                    cp.startsWith('974') ||
+                    cp.startsWith('976')
+                ) {
+                    codeDepartement = cp.substring(0, 3);
+                }
+
+                // Corse
+                else if (cp.startsWith('200') || cp.startsWith('201') || cp.startsWith('202')) {
+                    codeDepartement = null;
+                }
+
+                // Métropole
+                else {
+                    codeDepartement = cp.substring(0, 2);
+                }
+            }
+
+            if (codeDepartement) {
+                console.log('🔎 COMMUNE FALLBACK', {
+                    original: cleanCity,
+                    variants: cityVariants,
+                    codePostal: cp,
+                    codeDepartement,
+                });
+
+                communes = await this.prisma.communeIndicator.findMany({
+                    where: {
+                        codeDepartement,
+                        commune: {
+                            in: cityVariants,
+                        },
+                    },
+                });
+
+                console.log('🔎 COMMUNE FALLBACK RESULT', {
+                    count: communes.length,
+                    communes: communes.map((c) => ({
+                        codeInsee: c.codeInsee,
+                        commune: c.commune,
+                        codeDepartement: c.codeDepartement,
+                    })),
+                });
+            }
         }
 
         // =====================================================
@@ -151,7 +208,7 @@ export class CommuneIndicatorService {
             if (cleanCity === 'LYON' && cpNumber >= 69001 && cpNumber <= 69009) {
                 const arrondissement = cpNumber - 69000;
 
-                const expectedInsee = `693${String(arrondissement).padStart(2, '0')}`;
+                const expectedInsee = `6938${arrondissement}`;
 
                 const commune = communes.find((c) => c.codeInsee === expectedInsee);
 
@@ -266,5 +323,29 @@ export class CommuneIndicatorService {
             .replace(/\s+/g, '-')
             .replace(/-+/g, '-')
             .replace(/^-|-$/g, '');
+    }
+
+    private getCityVariants(city: string): string[] {
+        if (!city) {
+            return [];
+        }
+
+        const variants = new Set<string>();
+
+        const normalized = this.normalizeCity(city);
+
+        variants.add(normalized);
+
+        // LE-PLESSIS-ROBINSON
+        // → PLESSIS-ROBINSON
+        variants.add(normalized.replace(/^(LE|LA|LES)-/, ''));
+
+        // Variante espaces
+        variants.add(normalized.replace(/-/g, ' '));
+
+        // Variante sans article + espaces
+        variants.add(normalized.replace(/^(LE|LA|LES)-/, '').replace(/-/g, ' '));
+
+        return [...variants].filter(Boolean);
     }
 }

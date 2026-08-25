@@ -9,20 +9,28 @@ export class CommuneEngineService {
             return null;
         }
 
-        const dvfTransactions = commune.dvfTransactions ?? 0;
-        const population = commune.population ?? 0;
-        const evolutionPopulation = commune.evolutionPopulation5Years ?? 0;
-        const priceEvolution = commune.priceEvolution5Years ?? 0;
+        // =========================================================
+        // DONNÉES
+        // =========================================================
 
-        const fiberCoverage = commune.fiberCoverage ?? 0;
-        const schoolIndex = commune.schoolIndex ?? 0;
-        const doctorAccess = commune.doctorAccess ?? 0;
+        const dvfTransactions = commune.dvfTransactions ?? null;
+        const population = commune.population ?? null;
+        const evolutionPopulation = commune.evolutionPopulation5Years ?? null;
+        const priceEvolution = commune.priceEvolution5Years ?? null;
 
-        const floodRisk = commune.floodRisk ?? 5;
-        const icpeSurface = commune.icpeSurface ?? 100;
-        const sevesoSurface = commune.sevesoSurface ?? 100;
+        const fiberCoverage = commune.fiberCoverage ?? null;
+        const schoolIndex = commune.schoolIndex ?? null;
+        const doctorAccess = commune.doctorAccess ?? null;
 
-        const propertyTaxRate = commune.propertyTaxRate ?? 100;
+        const floodRisk = commune.floodRisk ?? null;
+        const icpeSurface = commune.icpeSurface ?? null;
+        const sevesoSurface = commune.sevesoSurface ?? null;
+
+        const propertyTaxRate = commune.propertyTaxRate ?? null;
+
+        // =========================================================
+        // SCORES
+        // =========================================================
 
         let realEstate = 0;
         let demographics = 0;
@@ -33,132 +41,296 @@ export class CommuneEngineService {
         const strengths: string[] = [];
         const weaknesses: string[] = [];
 
-        // -----------------------------
-        // IMMOBILIER (35)
-        // -----------------------------
+        // =========================================================
+        // IMMOBILIER — 35 POINTS
+        // =========================================================
 
-        if (priceEvolution != null) {
+        let realEstateDataAvailable = false;
+
+        // Évolution des prix
+        if (priceEvolution !== null) {
+            realEstateDataAvailable = true;
+
             if (priceEvolution >= 15) {
                 realEstate += 20;
-                strengths.push(`Marché immobilier dynamique (+${priceEvolution.toFixed(1)}% sur 5 ans)`);
+
+                strengths.push(`Marché immobilier très dynamique (+${priceEvolution.toFixed(1)} % sur 5 ans)`);
             } else if (priceEvolution >= 5) {
-                realEstate += 14;
+                realEstate += 15;
+
+                strengths.push(`Marché immobilier en progression (+${priceEvolution.toFixed(1)} % sur 5 ans)`);
             } else if (priceEvolution >= 0) {
-                realEstate += 8;
+                realEstate += 10;
+
+                strengths.push(`Marché immobilier stable (+${priceEvolution.toFixed(1)} % sur 5 ans)`);
+            } else if (priceEvolution >= -5) {
+                realEstate += 7;
+
+                weaknesses.push(`Marché immobilier légèrement en recul (${priceEvolution.toFixed(1)} % sur 5 ans)`);
             } else {
-                weaknesses.push('Marché immobilier en recul');
+                realEstate += 4;
+
+                weaknesses.push(`Marché immobilier en recul (${priceEvolution.toFixed(1)} % sur 5 ans)`);
             }
         }
 
-        if (dvfTransactions >= 500) {
-            realEstate += 15;
-            strengths.push('Marché immobilier liquide');
-        } else if (dvfTransactions >= 200) {
-            realEstate += 10;
-        } else if (dvfTransactions >= 50) {
-            realEstate += 6;
-        } else {
-            weaknesses.push('Peu de transactions immobilières');
+        // Liquidité du marché
+        if (dvfTransactions !== null) {
+            realEstateDataAvailable = true;
+
+            if (dvfTransactions >= 500) {
+                realEstate += 15;
+
+                strengths.push('Marché immobilier très liquide');
+            } else if (dvfTransactions >= 200) {
+                realEstate += 11;
+
+                strengths.push('Marché immobilier liquide');
+            } else if (dvfTransactions >= 100) {
+                realEstate += 8;
+            } else if (dvfTransactions >= 50) {
+                realEstate += 5;
+            } else {
+                realEstate += 2;
+
+                weaknesses.push('Faible volume de transactions immobilières');
+            }
         }
 
         realEstate = Math.min(realEstate, 35);
 
-        // -----------------------------
-        // DEMOGRAPHIE (20)
-        // -----------------------------
+        // =========================================================
+        // DÉMOGRAPHIE — 20 POINTS
+        // =========================================================
 
-        if (population >= 50000) {
-            demographics += 10;
-            strengths.push('Commune attractive');
-        } else if (population >= 10000) {
-            demographics += 7;
-        } else {
-            demographics += 4;
+        let demographicsDataAvailable = false;
+
+        // Population
+        if (population !== null) {
+            demographicsDataAvailable = true;
+
+            if (population >= 50000) {
+                demographics += 10;
+                strengths.push('Commune à forte population');
+            } else if (population >= 20000) {
+                demographics += 8;
+                strengths.push('Bassin de population significatif');
+            } else if (population >= 10000) {
+                demographics += 7;
+            } else if (population >= 5000) {
+                demographics += 5;
+            } else {
+                demographics += 3;
+            }
         }
 
-        if (evolutionPopulation >= 5) {
-            demographics += 10;
-            strengths.push('Population en croissance');
-        } else if (evolutionPopulation >= 0) {
-            demographics += 7;
-        } else {
-            weaknesses.push('Population en baisse');
+        // Évolution démographique
+        if (evolutionPopulation !== null) {
+            demographicsDataAvailable = true;
+
+            if (evolutionPopulation >= 5) {
+                demographics += 10;
+
+                strengths.push(`Population en forte croissance (+${evolutionPopulation.toFixed(1)} % sur 5 ans)`);
+            } else if (evolutionPopulation >= 2) {
+                demographics += 9;
+
+                strengths.push(`Population en croissance (+${evolutionPopulation.toFixed(1)} % sur 5 ans)`);
+            } else if (evolutionPopulation >= 0) {
+                demographics += 7;
+            } else if (evolutionPopulation >= -2) {
+                demographics += 4;
+
+                weaknesses.push(`Population légèrement en baisse (${evolutionPopulation.toFixed(1)} % sur 5 ans)`);
+            } else {
+                demographics += 2;
+
+                weaknesses.push(`Population en baisse (${evolutionPopulation.toFixed(1)} % sur 5 ans)`);
+            }
         }
 
         demographics = Math.min(demographics, 20);
 
-        // -----------------------------
-        // QUALITE DE VIE (20)
-        // -----------------------------
+        // =========================================================
+        // QUALITÉ DE VIE — 20 POINTS
+        // =========================================================
 
-        if (fiberCoverage >= 90) {
-            qualityOfLife += 7;
-            strengths.push('Excellente couverture fibre');
-        } else if (fiberCoverage >= 70) {
-            qualityOfLife += 5;
+        let qualityOfLifeDataAvailable = false;
+
+        // Fibre
+        if (fiberCoverage !== null) {
+            qualityOfLifeDataAvailable = true;
+
+            if (fiberCoverage >= 90) {
+                qualityOfLife += 7;
+                strengths.push('Excellente couverture fibre');
+            } else if (fiberCoverage >= 70) {
+                qualityOfLife += 5;
+            } else if (fiberCoverage >= 50) {
+                qualityOfLife += 3;
+            } else {
+                qualityOfLife += 1;
+
+                weaknesses.push('Couverture fibre limitée');
+            }
         }
 
-        if (schoolIndex >= 100) {
-            qualityOfLife += 7;
-            strengths.push('Bonne offre scolaire');
-        } else if (schoolIndex >= 80) {
-            qualityOfLife += 5;
+        // Écoles
+        if (schoolIndex !== null) {
+            qualityOfLifeDataAvailable = true;
+
+            if (schoolIndex >= 120) {
+                qualityOfLife += 7;
+                strengths.push('Très bonne offre scolaire');
+            } else if (schoolIndex >= 100) {
+                qualityOfLife += 6;
+                strengths.push('Bonne offre scolaire');
+            } else if (schoolIndex >= 80) {
+                qualityOfLife += 4;
+            } else {
+                qualityOfLife += 2;
+                weaknesses.push('Offre scolaire limitée');
+            }
         }
 
-        if (doctorAccess >= 3.5) {
-            qualityOfLife += 6;
-            strengths.push('Bonne offre médicale');
-        } else if (doctorAccess >= 2.5) {
-            qualityOfLife += 4;
-        } else {
-            weaknesses.push('Accès aux soins limité');
+        // Médecins
+        if (doctorAccess !== null) {
+            qualityOfLifeDataAvailable = true;
+
+            if (doctorAccess >= 3.5) {
+                qualityOfLife += 6;
+                strengths.push('Bonne offre médicale');
+            } else if (doctorAccess >= 2.5) {
+                qualityOfLife += 4;
+            } else if (doctorAccess >= 1.5) {
+                qualityOfLife += 2;
+            } else {
+                qualityOfLife += 1;
+                weaknesses.push('Accès aux soins limité');
+            }
         }
 
         qualityOfLife = Math.min(qualityOfLife, 20);
 
-        // -----------------------------
-        // ENVIRONNEMENT (15)
-        // -----------------------------
+        // =========================================================
+        // ENVIRONNEMENT — 15 POINTS
+        // =========================================================
 
-        if (floodRisk <= 1) {
-            environment += 6;
-        } else if (floodRisk <= 2) {
-            environment += 4;
-        } else {
-            weaknesses.push("Risque d'inondation; élevé;");
+        let environmentDataAvailable = false;
+
+        // Risque inondation
+        if (floodRisk !== null) {
+            environmentDataAvailable = true;
+
+            if (floodRisk <= 1) {
+                environment += 6;
+            } else if (floodRisk <= 2) {
+                environment += 4;
+            } else if (floodRisk <= 3) {
+                environment += 2;
+
+                weaknesses.push('Risque d’inondation modéré');
+            } else {
+                weaknesses.push('Risque d’inondation élevé');
+            }
         }
 
-        if ((icpeSurface ?? 0) < 10) {
-            environment += 5;
-        } else {
-            weaknesses.push("Présence d'activités;industrielles;");
+        // Activités ICPE
+        if (icpeSurface !== null) {
+            environmentDataAvailable = true;
+
+            if (icpeSurface === 0) {
+                environment += 5;
+            } else if (icpeSurface < 10) {
+                environment += 4;
+            } else if (icpeSurface < 50) {
+                environment += 2;
+
+                weaknesses.push('Présence d’activités industrielles');
+            } else {
+                weaknesses.push('Présence importante d’activités industrielles');
+            }
         }
 
-        if ((sevesoSurface ?? 0) === 0) {
-            environment += 4;
-        } else {
-            weaknesses.push('Présence de sites Seveso');
+        // Sites Seveso
+        if (sevesoSurface !== null) {
+            environmentDataAvailable = true;
+
+            if (sevesoSurface === 0) {
+                environment += 4;
+            } else if (sevesoSurface < 10) {
+                environment += 2;
+
+                weaknesses.push('Présence de sites Seveso à proximité');
+            } else {
+                weaknesses.push('Présence de sites Seveso');
+            }
         }
 
         environment = Math.min(environment, 15);
 
-        // -----------------------------
-        // FISCALITE (10)
-        // -----------------------------
+        // =========================================================
+        // FISCALITÉ — 10 POINTS
+        // =========================================================
 
-        if (propertyTaxRate < 30) {
-            taxation = 10;
-            strengths.push('Fiscalité avantageuse');
-        } else if (propertyTaxRate < 40) {
-            taxation = 7;
-        } else {
-            taxation = 3;
-            weaknesses.push('Taxe foncière élevée');
+        let taxationDataAvailable = false;
+
+        if (propertyTaxRate !== null) {
+            taxationDataAvailable = true;
+
+            if (propertyTaxRate < 30) {
+                taxation = 10;
+                strengths.push('Fiscalité locale avantageuse');
+            } else if (propertyTaxRate < 40) {
+                taxation = 7;
+            } else if (propertyTaxRate < 50) {
+                taxation = 5;
+            } else {
+                taxation = 2;
+                weaknesses.push('Fiscalité locale élevée');
+            }
         }
 
-        // -----------------------------
+        // =========================================================
+        // SCORE BRUT
+        // =========================================================
 
-        const score = realEstate + demographics + qualityOfLife + environment + taxation;
+        const rawScore = realEstate + demographics + qualityOfLife + environment + taxation;
+
+        // =========================================================
+        // NORMALISATION
+        //
+        // On ne pénalise pas une commune lorsqu'une donnée
+        // environnementale ou fiscale est simplement indisponible.
+        // =========================================================
+
+        let availableMaximum = 0;
+
+        if (realEstateDataAvailable) {
+            availableMaximum += 35;
+        }
+
+        if (demographicsDataAvailable) {
+            availableMaximum += 20;
+        }
+
+        if (qualityOfLifeDataAvailable) {
+            availableMaximum += 20;
+        }
+
+        if (environmentDataAvailable) {
+            availableMaximum += 15;
+        }
+
+        if (taxationDataAvailable) {
+            availableMaximum += 10;
+        }
+
+        const score = availableMaximum > 0 ? Math.min(100, Math.round((rawScore / availableMaximum) * 100)) : 0;
+
+        // =========================================================
+        // NIVEAU
+        // =========================================================
 
         let level: CommuneAnalysis['level'];
 
@@ -171,6 +343,10 @@ export class CommuneEngineService {
         } else {
             level = 'Faible';
         }
+
+        // =========================================================
+        // RETOUR
+        // =========================================================
 
         return {
             score,

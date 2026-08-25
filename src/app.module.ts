@@ -23,6 +23,7 @@ import { MetaDataScrapperModule } from './meta-data-scrapper/meta-data-scrapper.
 import { FirecrawlScraperModule } from './firecrawl-scraper/firecrawl-scraper.module';
 import { AdminModule } from './admin/admin.module';
 import { ProjectEstimateModule } from './project-estimate/project-estimate.module';
+import { ComparisonModule } from './comparison/comparison.module';
 
 @Module({
     imports: [
@@ -46,6 +47,7 @@ import { ProjectEstimateModule } from './project-estimate/project-estimate.modul
         }),
         AdminModule,
         ProjectEstimateModule,
+        ComparisonModule,
     ],
     controllers: [AppController],
     providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService, ReportService],

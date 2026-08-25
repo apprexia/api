@@ -111,7 +111,7 @@ export class ScoreEngineService {
 
             amenitiesScore: {
                 ...amenitiesResult,
-                score: amenitiesResult.score,
+                score: amenitiesScore,
             },
 
             confidenceScore,

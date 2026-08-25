@@ -30,6 +30,8 @@ model User {
   favorites       Favorite[]
   transactions    CreditTransaction[]
   ProjectEstimate ProjectEstimate?
+
+  comparisons Comparison[]
 }
 
 enum UserRole {
@@ -135,6 +137,8 @@ model Analysis {
   Favorite                  Favorite[]
   communeIndicator          CommuneIndicator? @relation(fields: [communeIndicatorCodeInsee], references: [codeInsee])
   communeIndicatorCodeInsee String?
+
+  comparisonItems ComparisonAnalysis[]
 
   @@index([city])
   @@index([codePostal])
@@ -311,4 +315,60 @@ model ProjectEstimate {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Comparison {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Nom donné par l'utilisateur
+  name String
+
+  // Objectif du comparateur
+  objective ComparisonObjective @default(GLOBAL)
+
+  // Analyse gagnante
+  recommendedAnalysisId String?
+
+  // Résultat global généré par le moteur de comparaison
+  summary Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  analyses ComparisonAnalysis[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ComparisonAnalysis {
+  id String @id @default(uuid())
+
+  comparisonId String
+  analysisId   String
+
+  // Position du bien dans la comparaison
+  position Int
+
+  comparison Comparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  analysis   Analysis   @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([comparisonId, analysisId])
+  @@unique([comparisonId, position])
+  @@index([comparisonId])
+  @@index([analysisId])
+}
+
+enum ComparisonObjective {
+  GLOBAL
+  PROFITABILITY
+  SECURITY
+  CAPITAL_GAIN
+  NEGOTIATION
+  LIQUIDITY
 }

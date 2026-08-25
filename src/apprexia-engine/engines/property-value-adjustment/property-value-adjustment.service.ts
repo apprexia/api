@@ -46,19 +46,12 @@ export class PropertyValueAdjustmentEngineService {
         if (typeLocal?.toLowerCase().includes('maison') && terrain && surface) {
             const ratioTerrain = terrain / surface;
 
-            // Terrain intéressant
-            if (terrain >= 400 && ratioTerrain >= 5) {
-                adjustment += 0.04;
-            }
-
-            // Grand terrain rare
-            if (terrain >= 800 && ratioTerrain >= 10) {
-                adjustment += 0.06;
-            }
-
-            // Très grand terrain
             if (terrain >= 1500) {
                 adjustment += 0.1;
+            } else if (terrain >= 800 && ratioTerrain >= 10) {
+                adjustment += 0.06;
+            } else if (terrain >= 400 && ratioTerrain >= 5) {
+                adjustment += 0.04;
             }
         }
 
