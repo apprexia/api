@@ -24,6 +24,7 @@ import { FirecrawlScraperModule } from './firecrawl-scraper/firecrawl-scraper.mo
 import { AdminModule } from './admin/admin.module';
 import { ProjectEstimateModule } from './project-estimate/project-estimate.module';
 import { ComparisonModule } from './comparison/comparison.module';
+import { VisitModule } from './visit/visit.module';
 
 @Module({
     imports: [
@@ -48,6 +49,7 @@ import { ComparisonModule } from './comparison/comparison.module';
         AdminModule,
         ProjectEstimateModule,
         ComparisonModule,
+        VisitModule,
     ],
     controllers: [AppController],
     providers: [AppService, AnalysesAiService, OpenaiService, AnalysisMarketService, ReportService],

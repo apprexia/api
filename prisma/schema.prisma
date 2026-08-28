@@ -20,7 +20,6 @@ model User {
   name   String?
   avatar String?
 
-  // Nombre de crédits disponibles
   credits   Int      @default(2)
   role      UserRole @default(USER)
   createdAt DateTime @default(now())
@@ -32,6 +31,8 @@ model User {
   ProjectEstimate ProjectEstimate?
 
   comparisons Comparison[]
+
+  visits Visit[]
 }
 
 enum UserRole {
@@ -139,6 +140,7 @@ model Analysis {
   communeIndicatorCodeInsee String?
 
   comparisonItems ComparisonAnalysis[]
+  visits          Visit[]
 
   @@index([city])
   @@index([codePostal])
@@ -371,4 +373,104 @@ enum ComparisonObjective {
   CAPITAL_GAIN
   NEGOTIATION
   LIQUIDITY
+}
+
+model Visit {
+  id String @id @default(uuid())
+
+  userId     String
+  analysisId String
+
+  // Informations générales
+  status      VisitStatus @default(IN_PROGRESS)
+  currentStep Int         @default(1)
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  // Résultat de la visite
+  score   Int?
+  verdict VisitVerdict?
+
+  // Synthèse
+  totalEstimatedCosts Float @default(0)
+
+  okCount      Int @default(0)
+  warningCount Int @default(0)
+  problemCount Int @default(0)
+
+  // Impression générale facultative
+  overallNote String?
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  answers VisitAnswer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([analysisId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model VisitAnswer {
+  id String @id @default(uuid())
+
+  visitId String
+
+  // Identifiant stable de la question
+  questionKey String
+
+  category VisitCategory
+
+  status VisitAnswerStatus @default(NOT_CHECKED)
+
+  // Note facultative
+  note String?
+
+  // Coût estimé par l'utilisateur
+  estimatedCost Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([visitId, questionKey])
+  @@index([visitId])
+  @@index([category])
+}
+
+enum VisitStatus {
+  IN_PROGRESS
+  COMPLETED
+  ANALYSIS_RELAUNCHED
+  ABANDONED
+}
+
+enum VisitAnswerStatus {
+  NOT_CHECKED
+  OK
+  WARNING
+  PROBLEM
+}
+
+enum VisitCategory {
+  ENVIRONMENT
+  PROPERTY_CONDITION
+  WORKS
+  DOCUMENTS
+  COPROPERTY
+  INVESTMENT
+}
+
+enum VisitVerdict {
+  REASSURING
+  VIGILANCE
+  NEGOTIATION
+  HIGH_RISK
 }
