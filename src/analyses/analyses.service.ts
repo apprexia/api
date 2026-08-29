@@ -74,7 +74,16 @@ export class AnalysesService {
             this.logger.log(`🔎 Scraping [${sourceSite}] → ${url}`);
 
             const metadata = await this.scrapeListing(url, dto.device ?? 'desktop');
+            this.logger.log(`🏠 PROPERTY CONDITION APRÈS SCRAPING: ${metadata.propertyCondition}`);
 
+            this.logger.log(
+                `📦 METADATA APRÈS SCRAPING: ${JSON.stringify({
+                    propertyCondition: metadata.propertyCondition,
+                    typeLocal: metadata.typeLocal,
+                    surface: metadata.surface,
+                    terrain: metadata.terrain,
+                })}`,
+            );
             this.logger.log(`✅ Scraping terminé [${sourceSite}]`);
 
             void this.processAnalysis(analysis.id, metadata);
@@ -139,6 +148,29 @@ export class AnalysesService {
         let locationData: LocationEngineInput | null = null;
         let locationAnalysis: LocationAnalysis | null = null;
         let communeIndicator: CommuneIndicator | null = null;
+
+        // =========================================================
+        // NORMALISATION DES MÉTADONNÉES
+        // =========================================================
+
+        /**
+         * Un bien NEUF et un bien RÉNOVÉ sont deux états différents.
+         *
+         * Certains scrapers / modèles IA peuvent détecter simultanément :
+         *
+         * propertyCondition = NEUF
+         * propertyFeatures.renove = true
+         *
+         * Dans ce cas, la donnée "renove" est incohérente pour Apprexia
+         * et doit être neutralisée avant le reste du pipeline.
+         */
+        const normalizedPropertyCondition = metadata.propertyCondition?.trim().toUpperCase();
+
+        if (normalizedPropertyCondition === 'NEUF' && metadata.propertyFeatures) {
+            metadata.propertyFeatures.renove = null;
+
+            console.log('🏠 NORMALISATION : bien NEUF → propertyFeatures.renove neutralisé');
+        }
 
         try {
             // -------------------------
@@ -274,9 +306,6 @@ export class AnalysesService {
                 }
             }
 
-            console.log('LOCATION RESULT');
-            console.log(locationAnalysis);
-
             // -------------------------
             // ÉTAPE 3 : VALIDATION
             // -------------------------
@@ -341,6 +370,15 @@ export class AnalysesService {
                 locationAnalysis,
                 communeIndicator,
             );
+
+            console.log('🔎 PROPERTY CONDITION AFTER AI:', metadata.propertyCondition);
+            console.log('🔎 AI RESULT:', {
+                estimatedValueLow: aiResult.estimatedValueLow,
+                estimatedValueHigh: aiResult.estimatedValueHigh,
+                recommendedPrice: aiResult.recommendedPrice,
+                marketPosition: aiResult.marketPosition,
+                verdict: aiResult.verdict,
+            });
             this.logger.log(`🤖 OpenAI analyse terminé en ${Date.now() - startAi} ms`);
 
             // =========================
@@ -350,21 +388,63 @@ export class AnalysesService {
             const amenityAnalysis = this.amenityEngine.compute(metadata.propertyFeatures, metadata.surface);
             this.logger.log(`🏠 Amenities terminé en ${Date.now() - startAmenities} ms`);
             const startEngine = Date.now();
+            console.log('🏗️ METADATA PROPERTY CONDITION BEFORE ENGINE:', metadata.propertyCondition);
+            console.log('🏗️ METADATA:', {
+                propertyCondition: metadata.propertyCondition,
+                typeLocal: metadata.typeLocal,
+                surface: metadata.surface,
+                terrain: metadata.terrain,
+            });
+            const propertyCondition =
+                metadata.propertyCondition && metadata.propertyCondition !== 'INCONNU'
+                    ? metadata.propertyCondition
+                    : 'INCONNU';
+
+            console.log('🏠 PROPERTY CONDITION FINAL:', propertyCondition);
             aiResult = await this.apprexiaEngineService.evaluate({
-                metadata,
+                metadata: {
+                    ...metadata,
+                    propertyCondition,
+                },
                 analysis: aiResult,
                 dvf: marketData,
                 apprexia: apprexiaMarketData,
                 commune: communeIndicator,
                 date: new Date(),
             });
+
             aiResult.propertyFeatures = metadata.propertyFeatures;
             aiResult.amenities = amenityAnalysis;
+
             this.logger.log(`⚙️ ApprexiaEngine terminé en ${Date.now() - startEngine} ms`);
 
             // -------------------------
-            // ÉTAPE 5B : RÈGLES MÉTIER
+            // ÉTAPE 5C : EXPLICATION IA
             // -------------------------
+
+            const startExplanation = Date.now();
+
+            const explanation = await this.analysesAiService.explain(
+                metadata,
+                aiResult,
+                marketData,
+                apprexiaMarketData,
+                locationAnalysis,
+                communeIndicator,
+            );
+
+            aiResult = {
+                ...aiResult,
+
+                scoreExplanation: explanation.scoreExplanation,
+                verdictExplanation: explanation.verdictExplanation,
+                negotiationAnalysis: explanation.negotiationAnalysis,
+                yieldAnalysis: explanation.yieldAnalysis,
+                strengths: explanation.strengths,
+                risks: explanation.risks,
+            };
+
+            this.logger.log(`🧠 Explication IA terminée en ${Date.now() - startExplanation} ms`);
         } catch (error) {
             console.error('Erreur analyse :', error);
 
@@ -438,6 +518,7 @@ export class AnalysesService {
                 city: this.normalizeCity(metadata.city ?? aiResult.city),
                 codePostal: this.normalizeCodePostal(metadata.codePostal),
                 typeLocal: metadata.typeLocal,
+                propertyCondition: metadata.propertyCondition ?? 'INCONNU',
                 rooms: aiResult.rooms,
                 bedrooms: metadata.bedrooms ?? null,
                 constructionYear: metadata.constructionYear ?? null,
@@ -675,7 +756,7 @@ export class AnalysesService {
             rooms: dto.pieces,
 
             floor: dto.etage ?? null,
-            condition: dto.etat,
+            propertyCondition: this.getPropertyCondition(dto.condition),
             dpe: dto.dpe,
             ges: dto.ges,
             propertyFeatures: dto.propertyFeatures,
@@ -684,6 +765,22 @@ export class AnalysesService {
             currency: 'EUR',
             images: [],
         };
+    }
+
+    private getPropertyCondition(condition?: string): 'NEUF' | 'ANCIEN' | 'INCONNU' {
+        switch (condition) {
+            case 'NEUF':
+                return 'NEUF';
+
+            case 'EXCELLENT':
+            case 'BON':
+            case 'A_RAFRAICHIR':
+            case 'A_RENOVER':
+                return 'ANCIEN';
+
+            default:
+                return 'INCONNU';
+        }
     }
 
     private cleanUrl(rawUrl: string): string {

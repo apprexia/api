@@ -15,6 +15,7 @@ export interface FirecrawlListingMetadata {
     streetAddress?: string;
 
     typeLocal?: string;
+    propertyCondition?: 'NEUF' | 'ANCIEN' | 'INCONNU';
 
     dpe?: string;
     ges?: string;

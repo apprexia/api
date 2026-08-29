@@ -18,6 +18,8 @@ export interface ListingMetadata {
     longitude?: number;
 
     typeLocal?: 'Maison' | 'Appartement' | 'Terrain' | 'Local commercial' | 'Parking' | 'Immeuble' | 'Inconnu';
+    condition?: 'NEUF' | 'EXCELLENT' | 'BON' | 'A_RAFRAICHIR' | 'A_RENOVER';
+    propertyCondition?: 'NEUF' | 'ANCIEN' | 'INCONNU';
 
     surface?: number;
     rooms?: number;
@@ -30,7 +32,6 @@ export interface ListingMetadata {
     totalFloors?: number;
 
     constructionYear?: number;
-    condition?: string;
 
     dpe?: string;
     ges?: string;

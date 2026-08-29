@@ -3,6 +3,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 
 import { FirecrawlListingMetadata, FirecrawlResponse } from './interfaces/firecrawl-listing-metadata.interface';
+
 import { ListingMetadata } from '../meta-data-scrapper/interfaces/listing-metadata.interface';
 import { PropertyFeatures } from '../meta-data-scrapper/interfaces/property-features.interface';
 import { OpenaiService } from '../services/openai/openai.service';
@@ -82,17 +83,10 @@ export class FirecrawlScraperService {
 
     /**
      * Scrape une annonce immobilière via Firecrawl.
-     */
-    // =========================================================================
-    // SCRAPE
-    // =========================================================================
-
-    /**
-     * Scrape une annonce immobilière via Firecrawl.
      *
-     * Firecrawl récupère la page et nous renvoyons ensuite
-     * exactement le même contrat que MetadataScraperService :
-     * ListingMetadata.
+     * Firecrawl récupère la page.
+     * Les données sont ensuite extraites par les règles déterministes
+     * puis vérifiées par OpenAI.
      */
     async scrape(url: string): Promise<ListingMetadata> {
         if (!this.supports(url)) {
@@ -142,30 +136,43 @@ export class FirecrawlScraperService {
             }
 
             // -------------------------------------------------------------
-            // Extraction
+            // Extraction déterministe
             // -------------------------------------------------------------
 
             const metadata = this.extractMetadata(markdown, result?.data?.metadata, url, platform);
-            // this.logger.log(`🔥 Métadonnées Firecrawl [${platform}] : ${JSON.stringify(metadata, null, 2)}`);
+
+            // -------------------------------------------------------------
+            // Vérification / enrichissement OpenAI
+            // -------------------------------------------------------------
+
             const verified = await this.openAiService.verifyExtractedMetadata({
                 url,
+
                 title: metadata.title ?? '',
+
                 description: metadata.description ?? '',
+
                 body: markdown,
 
                 extracted: {
                     address: metadata.address,
+
                     streetAddress: metadata.streetAddress,
+
                     city: metadata.city,
+
                     codePostal: metadata.codePostal,
 
                     typeLocal: metadata.typeLocal,
 
                     surface: metadata.surface,
+
                     terrain: metadata.terrain,
+
                     rooms: metadata.rooms,
 
                     dpe: metadata.dpe,
+
                     ges: metadata.ges,
 
                     propertyFeatures: metadata.propertyFeatures,
@@ -176,21 +183,33 @@ export class FirecrawlScraperService {
 
             this.logger.log(`🤖 Métadonnées vérifiées par OpenAI : ${JSON.stringify(verified, null, 2)}`);
 
+            // -------------------------------------------------------------
+            // Résultat final
+            // -------------------------------------------------------------
+
             return {
                 ...metadata,
 
                 address: verified.address ?? metadata.address,
+
                 streetAddress: verified.streetAddress ?? metadata.streetAddress,
+
                 city: verified.city ?? metadata.city,
+
                 codePostal: verified.codePostal ?? metadata.codePostal,
 
                 typeLocal: verified.typeLocal ?? metadata.typeLocal,
 
+                propertyCondition: verified.propertyCondition ?? metadata.propertyCondition,
+
                 surface: verified.surface ?? metadata.surface,
+
                 terrain: verified.terrain ?? metadata.terrain,
+
                 rooms: verified.rooms ?? metadata.rooms,
 
                 dpe: verified.dpe ?? metadata.dpe,
+
                 ges: verified.ges ?? metadata.ges,
 
                 propertyFeatures: verified.propertyFeatures ?? metadata.propertyFeatures,
@@ -208,6 +227,10 @@ export class FirecrawlScraperService {
         }
     }
 
+    // =========================================================================
+    // MAPPING
+    // =========================================================================
+
     private mapToListingMetadata(data: FirecrawlListingMetadata, url: string): ListingMetadata {
         return this.removeUndefinedValues({
             source: 'firecrawl',
@@ -215,25 +238,35 @@ export class FirecrawlScraperService {
             url,
 
             title: data.title,
+
             description: data.description,
 
             price: data.price,
+
             currency: 'EUR',
 
             surface: data.surface,
+
             rooms: data.rooms,
+
             bedrooms: data.bedrooms,
+
             bathrooms: data.bathrooms,
 
             city: data.city,
+
             codePostal: data.codePostal,
 
             address: data.address,
+
             streetAddress: data.streetAddress,
 
             typeLocal: this.normalizePropertyType(data.typeLocal),
 
+            propertyCondition: data.propertyCondition,
+
             dpe: data.dpe,
+
             ges: data.ges,
 
             images: data.images?.length ? data.images : data.imageUrl ? [data.imageUrl] : [],
@@ -258,6 +291,10 @@ export class FirecrawlScraperService {
         });
     }
 
+    // =========================================================================
+    // PROPERTY TYPE
+    // =========================================================================
+
     private normalizePropertyType(type?: string): ListingMetadata['typeLocal'] {
         if (!type) {
             return 'Inconnu';
@@ -273,7 +310,7 @@ export class FirecrawlScraperService {
             return 'Appartement';
         }
 
-        if (value.includes('maison') || value.includes('house')) {
+        if (value.includes('maison') || value.includes('house') || value.includes('villa')) {
             return 'Maison';
         }
 
@@ -296,8 +333,12 @@ export class FirecrawlScraperService {
         return 'Inconnu';
     }
 
+    // =========================================================================
+    // MARKDOWN
+    // =========================================================================
+
     /**
-     * Retourne uniquement le Markdown.
+     * Retourne uniquement le Markdown Firecrawl.
      */
     async scrapeMarkdown(url: string): Promise<string> {
         if (!this.supports(url)) {
@@ -351,9 +392,8 @@ export class FirecrawlScraperService {
     /**
      * Détecte DataDome et autres pages de blocage.
      *
-     * Attention :
-     * un challenge présent en fin de document ne signifie pas
-     * nécessairement que l'annonce n'a pas été récupérée.
+     * Un challenge présent dans le Markdown ne signifie pas nécessairement
+     * que l'annonce n'a pas également été récupérée.
      */
     private containsChallenge(markdown: string): boolean {
         const lower = markdown.toLowerCase();
@@ -384,8 +424,10 @@ export class FirecrawlScraperService {
         platform?: 'leboncoin' | 'seloger' | 'logic-immo',
     ): ListingMetadata {
         const text = this.normalizeMarkdown(markdown);
+
         const extracted: FirecrawlListingMetadata = {
             title: firecrawlMetadata?.title ?? this.extractTitle(markdown, platform),
+
             description: this.extractDescription(text, platform),
 
             price: firecrawlMetadata?.price ?? this.extractPrice(text, platform),
@@ -403,6 +445,7 @@ export class FirecrawlScraperService {
             codePostal: firecrawlMetadata?.codePostal ?? this.extractPostalCode(text),
 
             address: firecrawlMetadata?.address,
+
             streetAddress: firecrawlMetadata?.streetAddress,
 
             typeLocal: firecrawlMetadata?.typeLocal ?? this.extractPropertyType(text, platform),
@@ -414,6 +457,12 @@ export class FirecrawlScraperService {
             images: this.extractImages(markdown, platform, firecrawlMetadata),
 
             propertyFeatures: this.extractFeatures(text),
+
+            propertyCondition: this.detectPropertyCondition(
+                firecrawlMetadata?.title ?? this.extractTitle(markdown, platform) ?? '',
+                this.extractDescription(text, platform) ?? '',
+                text,
+            ),
 
             constructionYear: firecrawlMetadata?.constructionYear ?? this.extractConstructionYear(text),
 
@@ -442,6 +491,7 @@ export class FirecrawlScraperService {
     private normalizeMarkdown(markdown: string): string {
         return (
             markdown
+
                 // Images Markdown
                 .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
 
@@ -492,6 +542,162 @@ export class FirecrawlScraperService {
             .trim();
     }
 
+    private detectPropertyCondition(
+        title: string,
+        description: string,
+        fullText: string,
+    ): 'NEUF' | 'ANCIEN' | 'INCONNU' {
+        const normalize = (value: string) =>
+            value
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase();
+
+        const titleText = normalize(title);
+        const descriptionText = normalize(description);
+        const text = normalize(fullText);
+
+        // =====================================================
+        // 1. SIGNAUX FORTS : NEUF
+        // =====================================================
+
+        const strongNewPatterns = [
+            /\bappartement neuf\b/,
+            /\bmaison neuve\b/,
+            /\bbien neuf\b/,
+            /\bprogramme neuf\b/,
+            /\bprogramme immobilier neuf\b/,
+            /\bimmobilier neuf\b/,
+            /\bconstruction neuve\b/,
+            /\bresidence neuve\b/,
+            /\bnouvelle residence\b/,
+            /\bvefa\b/,
+            /\bvente en etat futur d achevement\b/,
+            /\bvente en l etat futur d achevement\b/,
+            /\blivraison prevue\b/,
+            /\blivraison prochaine\b/,
+            /\blivraison t[1-4]\b/,
+        ];
+
+        if (
+            strongNewPatterns.some((pattern) => pattern.test(titleText)) ||
+            strongNewPatterns.some((pattern) => pattern.test(descriptionText))
+        ) {
+            this.logger.log('🏗️ PROPERTY CONDITION → NEUF');
+
+            return 'NEUF';
+        }
+
+        // =====================================================
+        // 2. PROGRAMME IMMOBILIER / CONSTRUCTION
+        // =====================================================
+
+        const programPatterns = [
+            /\bprogramme immobilier\b/,
+            /\bprogramme immobilier neuf\b/,
+            /\bcommercialisation\b.*\bneuf\b/,
+            /\bachat dans le neuf\b/,
+            /\bappartement en cours de construction\b/,
+            /\bconstruction en cours\b/,
+            /\bresidence en construction\b/,
+        ];
+
+        if (programPatterns.some((pattern) => pattern.test(text))) {
+            this.logger.log('🏗️ PROPERTY CONDITION → NEUF (PROGRAMME)');
+
+            return 'NEUF';
+        }
+
+        // =====================================================
+        // 3. VEFA / LIVRAISON
+        // =====================================================
+
+        if (
+            /\bvefa\b/.test(text) ||
+            /\bvente en etat futur d achevement\b/.test(text) ||
+            /\blivraison\s+(?:prevue\s+)?(?:en\s+)?20\d{2}\b/.test(text)
+        ) {
+            this.logger.log('🏗️ PROPERTY CONDITION → NEUF (VEFA/LIVRAISON)');
+
+            return 'NEUF';
+        }
+
+        // =====================================================
+        // 4. ANNÉE DE CONSTRUCTION TRÈS RÉCENTE
+        // =====================================================
+
+        const currentYear = new Date().getFullYear();
+
+        const constructionPatterns = [
+            /\b(?:construit|construction|livre|livree|acheve|achevee)\s+(?:en\s+)?(20\d{2})\b/g,
+            /\b(?:construction|livraison)\s+(?:prevue\s+)?(?:en\s+)?(20\d{2})\b/g,
+        ];
+
+        for (const pattern of constructionPatterns) {
+            const matches = [...text.matchAll(pattern)];
+
+            for (const match of matches) {
+                const year = Number(match[1]);
+
+                if (!Number.isFinite(year)) {
+                    continue;
+                }
+
+                if (year >= currentYear - 2) {
+                    this.logger.log(`🏗️ PROPERTY CONDITION → NEUF (${year})`);
+
+                    return 'NEUF';
+                }
+            }
+        }
+
+        // =====================================================
+        // 5. ANCIEN EXPLICITE
+        // =====================================================
+
+        const oldPatterns = [
+            /\bappartement ancien\b/,
+            /\bmaison ancienne\b/,
+            /\bbien ancien\b/,
+            /\bimmeuble ancien\b/,
+            /\bbatiment ancien\b/,
+        ];
+
+        if (oldPatterns.some((pattern) => pattern.test(text))) {
+            this.logger.log('🏚️ PROPERTY CONDITION → ANCIEN');
+
+            return 'ANCIEN';
+        }
+
+        // =====================================================
+        // 6. RÉNOVÉ ≠ NEUF
+        // =====================================================
+
+        const renovationPatterns = [
+            /\bentierement renove\b/,
+            /\bentierement renovee\b/,
+            /\brefait a neuf\b/,
+            /\brenove recemment\b/,
+            /\brenovation complete\b/,
+            /\brenovation totale\b/,
+            /\bentierement refait\b/,
+        ];
+
+        if (renovationPatterns.some((pattern) => pattern.test(text))) {
+            this.logger.log('🔨 PROPERTY CONDITION → ANCIEN (RÉNOVÉ)');
+
+            return 'ANCIEN';
+        }
+
+        // =====================================================
+        // 7. INCONNU
+        // =====================================================
+
+        this.logger.log('❓ PROPERTY CONDITION → INCONNU');
+
+        return 'INCONNU';
+    }
+
     // =========================================================================
     // PRICE
     // =========================================================================
@@ -502,7 +708,9 @@ export class FirecrawlScraperService {
         if (platform === 'leboncoin') {
             patterns.push(
                 /Prix du bien\s*(?:\(Honoraires inclus\))?\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
                 /Prix de vente\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
                 /Prix\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
             );
         }
@@ -510,7 +718,9 @@ export class FirecrawlScraperService {
         if (platform === 'seloger') {
             patterns.push(
                 /Maison à vendre\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
                 /Appartement à vendre\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
                 /Prix du bien\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
             );
         }
@@ -518,14 +728,20 @@ export class FirecrawlScraperService {
         if (platform === 'logic-immo') {
             patterns.push(
                 /Prix(?: de vente)?\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
                 /([\d\s.\u00A0\u202F]+)\s*€\s*(?:FAI|honoraires compris)/i,
             );
         }
 
+        // -------------------------------------------------------------
         // Fallback commun
+        // -------------------------------------------------------------
+
         patterns.push(
             /Prix du bien\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
             /Prix de vente\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
             /Prix\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
         );
 
@@ -543,7 +759,10 @@ export class FirecrawlScraperService {
             }
         }
 
+        // -------------------------------------------------------------
         // Dernier fallback
+        // -------------------------------------------------------------
+
         const generic = /([\d\s.\u00A0\u202F]{4,})\s*€/g;
 
         let match: RegExpExecArray | null;
@@ -625,12 +844,14 @@ export class FirecrawlScraperService {
         for (const pattern of patterns) {
             const match = text.match(pattern);
 
-            if (match?.[1]) {
-                const rooms = Number(match[1]);
+            if (!match?.[1]) {
+                continue;
+            }
 
-                if (rooms >= 1 && rooms <= 30) {
-                    return rooms;
-                }
+            const rooms = Number(match[1]);
+
+            if (rooms >= 1 && rooms <= 30) {
+                return rooms;
             }
         }
 
@@ -647,12 +868,14 @@ export class FirecrawlScraperService {
         for (const pattern of patterns) {
             const match = text.match(pattern);
 
-            if (match?.[1]) {
-                const bedrooms = Number(match[1]);
+            if (!match?.[1]) {
+                continue;
+            }
 
-                if (bedrooms >= 0 && bedrooms <= 30) {
-                    return bedrooms;
-                }
+            const bedrooms = Number(match[1]);
+
+            if (bedrooms >= 0 && bedrooms <= 30) {
+                return bedrooms;
             }
         }
 
@@ -666,16 +889,25 @@ export class FirecrawlScraperService {
     private extractBathrooms(text: string): number | undefined {
         const patterns = [
             /Nombre de salles?\s+de\s+bain\s*[:\-]?\s*(\d+)/i,
+
             /Nombre de salles?\s+d['’]eau\s*[:\-]?\s*(\d+)/i,
+
             /(\d+)\s+salles?\s+de\s+bain\b/i,
+
             /(\d+)\s+salles?\s+d['’]eau\b/i,
         ];
 
         for (const pattern of patterns) {
             const match = text.match(pattern);
 
-            if (match?.[1]) {
-                return Number(match[1]);
+            if (!match?.[1]) {
+                continue;
+            }
+
+            const bathrooms = Number(match[1]);
+
+            if (bathrooms >= 0 && bathrooms <= 20) {
+                return bathrooms;
             }
         }
 
@@ -719,6 +951,7 @@ export class FirecrawlScraperService {
     private extractCity(text: string, platform?: 'leboncoin' | 'seloger' | 'logic-immo'): string | undefined {
         // Exemple :
         // Tours (37000)
+
         let match = text.match(/\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’ .\-]{1,60})\s*\(\s*(\d{5})\s*\)/i);
 
         if (match?.[1]) {
@@ -727,6 +960,7 @@ export class FirecrawlScraperService {
 
         // Exemple :
         // Tours 37000 · Quartier Centre-ville
+
         match = text.match(/\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’ .\-]{1,60})\s+(\d{5})\s*(?:·|•|$)/i);
 
         if (match?.[1]) {
@@ -735,6 +969,7 @@ export class FirecrawlScraperService {
 
         // Exemple :
         // Pointe Rouge, Marseille 8ème arrondissement (13008)
+
         match = text.match(
             /,\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’ .\-]+?)\s+\d+(?:er|ère|ème|e)?\s+arrondissement\s*\(\s*\d{5}\s*\)/i,
         );
@@ -744,6 +979,7 @@ export class FirecrawlScraperService {
         }
 
         // Marseille 8ème arrondissement (13008)
+
         match = text.match(
             /\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’ .\-]+?)\s+\d+(?:er|ère|ème|e)?\s+arrondissement\s*\(\s*\d{5}\s*\)/i,
         );
@@ -753,6 +989,7 @@ export class FirecrawlScraperService {
         }
 
         // Logic-Immo / SeLoger
+
         match = text.match(/(?:Ville|Localité|Commune)\s*[:\-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'’ .\-]{1,60})/i);
 
         if (match?.[1]) {
@@ -826,8 +1063,11 @@ export class FirecrawlScraperService {
     ): string | undefined {
         const explicitPatterns = [
             /Classe énergie\s*[:\-]\s*([A-G])\b/i,
+
             /Classe énergétique\s*[:\-]\s*([A-G])\b/i,
+
             /DPE\s*[:\-]\s*([A-G])\b/i,
+
             /DPE\s*\(\s*([A-G])\s*\)/i,
         ];
 
@@ -869,8 +1109,11 @@ export class FirecrawlScraperService {
     ): string | undefined {
         const explicitPatterns = [
             /Classe GES\s*[:\-]\s*([A-G])\b/i,
+
             /GES\s*[:\-]\s*([A-G])\b/i,
+
             /Émissions de GES\s*[:\-]\s*([A-G])\b/i,
+
             /Indice d['’]émission[^A-G]{0,40}\b([A-G])\b/i,
         ];
 
@@ -952,10 +1195,6 @@ export class FirecrawlScraperService {
     // IMAGES
     // =========================================================================
 
-    // =========================================================================
-    // IMAGES
-    // =========================================================================
-
     private extractImages(
         markdown: string,
         platform?: 'leboncoin' | 'seloger' | 'logic-immo',
@@ -963,9 +1202,9 @@ export class FirecrawlScraperService {
     ): string[] {
         const urls: string[] = [];
 
-        // ============================================================
+        // -------------------------------------------------------------
         // 1. OG IMAGE = IMAGE PRINCIPALE
-        // ============================================================
+        // -------------------------------------------------------------
 
         const ogImage = metadata?.ogImage || metadata?.['og:image'] || metadata?.['twitter:image'];
 
@@ -973,9 +1212,9 @@ export class FirecrawlScraperService {
             urls.push(ogImage.trim());
         }
 
-        // ============================================================
-        // 2. IMAGES DU MARKDOWN
-        // ============================================================
+        // -------------------------------------------------------------
+        // 2. IMAGES MARKDOWN
+        // -------------------------------------------------------------
 
         const markdownRegex = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/gi;
 
@@ -985,9 +1224,9 @@ export class FirecrawlScraperService {
             urls.push(match[1]);
         }
 
-        // ============================================================
+        // -------------------------------------------------------------
         // 3. URLS DIRECTES
-        // ============================================================
+        // -------------------------------------------------------------
 
         const directRegex = /https?:\/\/[^\s"'<>]+?\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]*)?/gi;
 
@@ -995,9 +1234,9 @@ export class FirecrawlScraperService {
             urls.push(match[0]);
         }
 
-        // ============================================================
+        // -------------------------------------------------------------
         // 4. FILTRE
-        // ============================================================
+        // -------------------------------------------------------------
 
         const filtered = urls.filter((url) => this.isPropertyImage(url, platform));
 
@@ -1011,17 +1250,17 @@ export class FirecrawlScraperService {
     private isPropertyImage(url: string, platform?: 'leboncoin' | 'seloger' | 'logic-immo'): boolean {
         const lower = url.toLowerCase();
 
-        // =====================================================================
+        // -------------------------------------------------------------
         // LE BON COIN
-        // =====================================================================
+        // -------------------------------------------------------------
 
         if (lower.includes('img.leboncoin.fr')) {
             return true;
         }
 
-        // =====================================================================
+        // -------------------------------------------------------------
         // SELOGER
-        // =====================================================================
+        // -------------------------------------------------------------
 
         if (lower.includes('mms.seloger.com')) {
             return true;
@@ -1031,17 +1270,17 @@ export class FirecrawlScraperService {
             return true;
         }
 
-        // =====================================================================
+        // -------------------------------------------------------------
         // LOGIC-IMMO
-        // =====================================================================
+        // -------------------------------------------------------------
 
         if (lower.includes('logic-immo.com') && /\.(jpg|jpeg|png|webp)(\?|$)/i.test(lower)) {
             return true;
         }
 
-        // =====================================================================
+        // -------------------------------------------------------------
         // AUTRES CDN IMMOBILIERS
-        // =====================================================================
+        // -------------------------------------------------------------
 
         if (lower.includes('property') || lower.includes('realestate') || lower.includes('annonce')) {
             return true;
@@ -1057,7 +1296,9 @@ export class FirecrawlScraperService {
     private extractConstructionYear(text: string): number | undefined {
         const patterns = [
             /Année de construction\s*[:\-]?\s*(19\d{2}|20\d{2})/i,
+
             /Année\s*[:\-]?\s*(19\d{2}|20\d{2})/i,
+
             /Construit(?:e)?\s+en\s+(19\d{2}|20\d{2})/i,
         ];
 
@@ -1087,16 +1328,25 @@ export class FirecrawlScraperService {
     private extractFloor(text: string): number | undefined {
         const patterns = [
             /Étage de votre bien\s*[:\-]?\s*(-?\d+)/i,
+
             /Étage\s*[:\-]?\s*(-?\d+)/i,
+
             /(\d+)(?:er|ème|e)?\s+étage\b/i,
         ];
 
         for (const pattern of patterns) {
             const match = text.match(pattern);
 
-            if (match?.[1]) {
-                return Number(match[1]);
+            if (!match?.[1]) {
+                continue;
             }
+
+            return Number(match[1]);
+        }
+
+        // Rez-de-chaussée
+        if (/\b(?:rez[- ]de[- ]chaussée|rdc)\b/i.test(text)) {
+            return 0;
         }
 
         return undefined;
@@ -1109,15 +1359,23 @@ export class FirecrawlScraperService {
     private extractTotalFloors(text: string): number | undefined {
         const patterns = [
             /Nombre d['’]étages dans l['’]immeuble\s*[:\-]?\s*(\d+)/i,
+
             /Nombre d['’]étages\s*[:\-]?\s*(\d+)/i,
+
             /Immeuble de\s+(\d+)\s+étages?/i,
         ];
 
         for (const pattern of patterns) {
             const match = text.match(pattern);
 
-            if (match?.[1]) {
-                return Number(match[1]);
+            if (!match?.[1]) {
+                continue;
+            }
+
+            const floors = Number(match[1]);
+
+            if (floors >= 0 && floors <= 100) {
+                return floors;
             }
         }
 
@@ -1155,7 +1413,9 @@ export class FirecrawlScraperService {
     private extractCharges(text: string): number | undefined {
         const patterns = [
             /Charges annuelles de copropriété\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
             /Charges annuelles\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
+
             /Charges de copropriété\s*[:\-]?\s*([\d\s.\u00A0\u202F]+)\s*€/i,
         ];
 
@@ -1183,6 +1443,7 @@ export class FirecrawlScraperService {
     private extractReference(text: string): string | undefined {
         const patterns = [
             /Référence\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9_\-/.]+)/i,
+
             /Réf(?:érence)?\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9_\-/.]+)/i,
         ];
 
@@ -1250,31 +1511,47 @@ export class FirecrawlScraperService {
 
         return {
             duplex: this.hasFeature(lower, ['duplex']),
+
             triplex: this.hasFeature(lower, ['triplex']),
+
             loft: this.hasFeature(lower, ['loft']),
 
             terrasse: this.hasFeature(lower, ['terrasse']),
+
             balcon: this.hasFeature(lower, ['balcon']),
+
             loggia: this.hasFeature(lower, ['loggia']),
+
             jardin: this.hasFeature(lower, ['jardin']),
+
             patio: this.hasFeature(lower, ['patio']),
 
             piscine: this.hasFeature(lower, ['piscine']),
+
             jacuzzi: this.hasFeature(lower, ['jacuzzi']),
+
             spa: this.hasFeature(lower, ['spa']),
+
             sauna: this.hasFeature(lower, ['sauna']),
 
             parking: this.hasFeature(lower, ['parking', 'place de parking', 'stationnement']),
 
             garage: this.hasFeature(lower, ['garage']),
+
             box: this.hasFeature(lower, ['box']),
+
             cave: this.hasFeature(lower, ['cave']),
+
             grenier: this.hasFeature(lower, ['grenier', 'combles']),
 
             ascenseur: this.hasFeature(lower, ['ascenseur']),
+
             gardien: this.hasFeature(lower, ['gardien', 'concierge']),
+
             digicode: this.hasFeature(lower, ['digicode']),
+
             interphone: this.hasFeature(lower, ['interphone']),
+
             visiophone: this.hasFeature(lower, ['visiophone', 'vidéophone', 'videophone']),
 
             climatisation: this.hasFeature(lower, ['climatisation', 'climatisé', 'climatise']),
@@ -1289,6 +1566,7 @@ export class FirecrawlScraperService {
             ]),
 
             dressing: this.hasFeature(lower, ['dressing']),
+
             buanderie: this.hasFeature(lower, ['buanderie', 'lingerie']),
 
             vueMer: this.hasFeature(lower, ['vue mer', 'vue sur mer', 'vue mer panoramique']),
@@ -1325,10 +1603,10 @@ export class FirecrawlScraperService {
     /**
      * Détection avec gestion des négations :
      *
-     * "Pas de garage"       => false
-     * "sans garage"         => false
-     * "garage"              => true
-     * "garage privatif"     => true
+     * "Pas de garage" => false
+     * "sans garage"   => false
+     * "garage"        => true
+     * "garage privatif" => true
      */
     private hasFeature(text: string, terms: string[]): boolean | null {
         for (const term of terms) {
@@ -1350,10 +1628,6 @@ export class FirecrawlScraperService {
         }
 
         return null;
-    }
-
-    private escapeRegExp(value: string): string {
-        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     // =========================================================================
@@ -1396,6 +1670,10 @@ export class FirecrawlScraperService {
         return Object.fromEntries(
             Object.entries(object).filter(([, value]) => value !== undefined && value !== null),
         ) as T;
+    }
+
+    private escapeRegExp(value: string): string {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     private logAxiosError(error: unknown): void {

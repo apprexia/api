@@ -76,17 +76,20 @@ model Analysis {
   dpe String?
   ges String?
 
-  codeInsee        String?
-  communeContext   Json?
-  communeAnalysis  Json?
-  rooms            Int?
-  bedrooms         Int?
-  floor            Int?
-  constructionYear Int?
-  surface          Float?
-  terrain          Float?
-  score            Int?
-  scoreExplanation String?
+  codeInsee                   String?
+  communeContext              Json?
+  communeAnalysis             Json?
+  rooms                       Int?
+  bedrooms                    Int?
+  floor                       Int?
+  constructionYear            Int?
+  propertyCondition           PropertyCondition @default(INCONNU)
+  propertyConditionConfidence Float?
+  propertyConditionSignals    String[]          @default([])
+  surface                     Float?
+  terrain                     Float?
+  score                       Int?
+  scoreExplanation            String?
 
   verdict            String?
   verdictExplanation String?
@@ -156,6 +159,12 @@ enum AnalysisStatus {
   AI_FAILED
   INSUFFICIENT_DATA
   UNSUPPORTED_PROPERTY_TYPE
+}
+
+enum PropertyCondition {
+  NEUF
+  ANCIEN
+  INCONNU
 }
 
 model Favorite {

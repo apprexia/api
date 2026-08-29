@@ -15,7 +15,7 @@ export class CreateManualAnalysisDto {
 
     pieces: number;
 
-    etat: string;
+    condition?: 'NEUF' | 'EXCELLENT' | 'BON' | 'A_RAFRAICHIR' | 'A_RENOVER';
     etage?: number;
 
     dpe: string;

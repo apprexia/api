@@ -490,6 +490,7 @@ export class MetadataScraperService implements OnModuleDestroy {
         const surface = this.extractSurface(fullText);
         const terrain = this.extractTerrainSurface(fullText);
         const typeLocal = this.detectTypeLocal(title, description);
+        const propertyCondition = this.detectPropertyCondition(title, description, fullText);
         const propertyFeatures = this.extractPropertyFeatures(title, description);
         const rooms = this.extractRooms(title);
 
@@ -608,8 +609,8 @@ export class MetadataScraperService implements OnModuleDestroy {
             body: fullText,
             extracted: {
                 ...location,
-
                 typeLocal,
+                propertyCondition,
                 surface,
                 terrain,
                 rooms,
@@ -647,10 +648,10 @@ export class MetadataScraperService implements OnModuleDestroy {
             surface: verified.surface,
             terrain: verified.terrain ?? terrain,
             typeLocal: verified.typeLocal,
+            propertyCondition: verified.propertyCondition ?? propertyCondition,
             rooms: verified.rooms,
             dpe: verified.dpe ?? dpe,
             ges: verified.ges ?? ges,
-
             propertyFeatures: verified.propertyFeatures,
         };
     }
@@ -963,6 +964,176 @@ export class MetadataScraperService implements OnModuleDestroy {
             ),
         };
     }
+
+        private detectPropertyCondition(
+            title: string,
+            description: string,
+            fullText: string,
+        ): 'NEUF' | 'ANCIEN' | 'INCONNU' {
+            const normalize = (value: string) =>
+                value
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .toLowerCase();
+
+            const titleText = normalize(title);
+            const descriptionText = normalize(description);
+            const text = normalize(fullText);
+
+            // =====================================================
+            // 1. SIGNAUX FORTS : NEUF
+            // =====================================================
+
+            const strongNewPatterns = [
+                /\bappartement neuf\b/,
+                /\bmaison neuve\b/,
+                /\bbien neuf\b/,
+                /\bprogramme neuf\b/,
+                /\bprogramme immobilier neuf\b/,
+                /\bimmobilier neuf\b/,
+                /\bconstruction neuve\b/,
+                /\bresidence neuve\b/,
+                /\bnouvelle residence\b/,
+                /\bvefa\b/,
+                /\bvente en etat futur d achevement\b/,
+                /\bvente en l etat futur d achevement\b/,
+                /\blivraison prevue\b/,
+                /\blivraison prochaine\b/,
+                /\blivraison t[1-4]\b/,
+            ];
+
+            if (
+                strongNewPatterns.some((pattern) => pattern.test(titleText)) ||
+                strongNewPatterns.some((pattern) => pattern.test(descriptionText))
+            ) {
+                this.logger.log('🏗️ PROPERTY CONDITION → NEUF');
+
+                return 'NEUF';
+            }
+
+            // =====================================================
+            // 2. PROGRAMME IMMOBILIER / CONSTRUCTION
+            // =====================================================
+
+            const programPatterns = [
+                /\bprogramme immobilier\b/,
+                /\bprogramme immobilier neuf\b/,
+                /\bcommercialisation\b.*\bneuf\b/,
+                /\bachat dans le neuf\b/,
+                /\bappartement en cours de construction\b/,
+                /\bconstruction en cours\b/,
+                /\bresidence en construction\b/,
+            ];
+
+            if (programPatterns.some((pattern) => pattern.test(text))) {
+                this.logger.log('🏗️ PROPERTY CONDITION → NEUF (PROGRAMME)');
+
+                return 'NEUF';
+            }
+
+            // =====================================================
+            // 3. VEFA / LIVRAISON
+            // =====================================================
+
+            if (
+                /\bvefa\b/.test(text) ||
+                /\bvente en etat futur d achevement\b/.test(text) ||
+                /\blivraison\s+(?:prevue\s+)?(?:en\s+)?20\d{2}\b/.test(text)
+            ) {
+                this.logger.log('🏗️ PROPERTY CONDITION → NEUF (VEFA/LIVRAISON)');
+
+                return 'NEUF';
+            }
+
+            // =====================================================
+            // 4. ANNÉE DE CONSTRUCTION TRÈS RÉCENTE
+            // =====================================================
+
+            const currentYear = new Date().getFullYear();
+
+            const constructionPatterns = [
+                /\b(?:construit|construction|livre|livree|acheve|achevee)\s+(?:en\s+)?(20\d{2})\b/g,
+                /\b(?:construction|livraison)\s+(?:prevue\s+)?(?:en\s+)?(20\d{2})\b/g,
+            ];
+
+            for (const pattern of constructionPatterns) {
+                const matches = [...text.matchAll(pattern)];
+
+                for (const match of matches) {
+                    const year = Number(match[1]);
+
+                    if (!Number.isFinite(year)) {
+                        continue;
+                    }
+
+                    /*
+                     * Une construction actuelle / future peut être
+                     * considérée comme du neuf.
+                     */
+
+                    if (year >= currentYear - 2) {
+                        this.logger.log(`🏗️ PROPERTY CONDITION → NEUF (${year})`);
+
+                        return 'NEUF';
+                    }
+                }
+            }
+
+            // =====================================================
+            // 5. ANCIEN EXPLICITE
+            // =====================================================
+
+            const oldPatterns = [
+                /\bappartement ancien\b/,
+                /\bmaison ancienne\b/,
+                /\bbien ancien\b/,
+                /\bimmeuble ancien\b/,
+                /\bbatiment ancien\b/,
+            ];
+
+            if (oldPatterns.some((pattern) => pattern.test(text))) {
+                this.logger.log('🏚️ PROPERTY CONDITION → ANCIEN');
+
+                return 'ANCIEN';
+            }
+
+            // =====================================================
+            // 6. RÉNOVÉ ≠ NEUF
+            // =====================================================
+            //
+            // Très important :
+            //
+            // "entièrement rénové"
+            // "refait à neuf"
+            // "cuisine neuve"
+            //
+            // ne signifie PAS que le bâtiment est neuf.
+            //
+
+            const renovationPatterns = [
+                /\bentierement renove\b/,
+                /\bentierement renovee\b/,
+                /\brefait a neuf\b/,
+                /\brenove recemment\b/,
+                /\brenovation complete\b/,
+                /\brenovation totale\b/,
+                /\bentierement refait\b/,
+            ];
+
+            if (renovationPatterns.some((pattern) => pattern.test(text))) {
+                this.logger.log('🔨 PROPERTY CONDITION → ANCIEN (RÉNOVÉ)');
+
+                return 'ANCIEN';
+            }
+
+            // =====================================================
+            // 7. INCONNU
+            // =====================================================
+
+            this.logger.log('❓ PROPERTY CONDITION → INCONNU');
+
+            return 'INCONNU';
+        }
 
     private detectTypeLocal(
         title: string,
@@ -2250,9 +2421,11 @@ export class MetadataScraperService implements OnModuleDestroy {
         // ==================================================
 
         const dpePatterns = [
-            /\bdpe\s*[:\-]?\s*([a-g])\b/i,
+            /\bdpe\s*[:\-]?\s*(?:classe\s*)?([a-g])\b/i,
 
             /\bclasse\s+(?:energetique|energie)\s*[:\-]?\s*([a-g])\b/i,
+
+            /\bclasse\s+(?:energetique|energie)\s*[:\-]?\s*(?:classe\s*)?([a-g])\b/i,
 
             /\bperformance\s+energetique\s*[:\-]?\s*([a-g])\b/i,
 
@@ -2279,7 +2452,7 @@ export class MetadataScraperService implements OnModuleDestroy {
         // ==================================================
 
         const gesPatterns = [
-            /\bges\s*[:\-]?\s*([a-g])\b/i,
+            /\bges\s*[:\-]?\s*(?:classe\s*)?([a-g])\b/i,
 
             /\bclasse\s+climat\s*[:\-]?\s*([a-g])\b/i,
 

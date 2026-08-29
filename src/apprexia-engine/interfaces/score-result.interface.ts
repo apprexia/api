@@ -9,4 +9,5 @@ export interface ScoreResult {
     amenitiesScore: AmenityResult;
     confidenceScore: number;
     liquidityScore: number;
+    riskLevel: number;
 }

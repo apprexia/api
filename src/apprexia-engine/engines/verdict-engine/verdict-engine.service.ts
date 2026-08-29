@@ -1,69 +1,174 @@
 import { Injectable } from '@nestjs/common';
+
 import { EngineContext } from '../../interfaces/engine-context.interface';
 
-export type Verdict = 'INVESTIR' | 'FAVORABLE' | 'NEGOCIER' | 'EVITER';
+export type Verdict = 'INVESTIR' | 'NEGOCIER' | 'EVITER';
 
 @Injectable()
 export class VerdictEngineService {
-    compute(context: EngineContext, score: number): Verdict {
+    compute(context: EngineContext, score: number, riskLevel: number): Verdict {
         const analysis = context.analysis;
 
         const asking = analysis.askingPrice;
-        const reference = analysis.dvfReferenceValue;
 
-        const risk = analysis.riskLevel ?? 50;
+        const reference =
+            analysis.valuation?.adjustedValue ??
+            (analysis.estimatedValueLow && analysis.estimatedValueHigh
+                ? (analysis.estimatedValueLow + analysis.estimatedValueHigh) / 2
+                : analysis.dvfReferenceValue);
+
         const yieldRate = analysis.grossYield;
 
-        if (!reference) {
-            return 'FAVORABLE';
-        }
+        // =====================================================
+        // LOG
+        // =====================================================
 
-        const delta = ((reference - asking) / reference) * 100;
+        console.log('🚦 VERDICT ENGINE INPUT:', {
+            score,
+            riskLevel,
+            asking,
+            reference,
+            yieldRate,
+        });
 
-        // ==============================
-        // RISQUE IMPORTANT
-        // ==============================
+        // =====================================================
+        // DONNÉES INSUFFISANTES
+        // =====================================================
 
-        if (risk >= 80) {
+        if (!asking || asking <= 0 || !reference || reference <= 0) {
+            if (score >= 70 && riskLevel <= 40) {
+                return 'NEGOCIER';
+            }
+
             return 'EVITER';
         }
 
-        // ==============================
-        // OPPORTUNITE FORTE
-        // ==============================
+        // =====================================================
+        // ÉCART PRIX / VALEUR APPREXIA
+        // =====================================================
 
-        if (delta >= 15 && score >= 70 && risk <= 40 && (yieldRate == null || yieldRate >= 4)) {
-            return 'INVESTIR';
-        }
+        const delta = ((asking - reference) / reference) * 100;
 
-        // ==============================
-        // BONNE OPPORTUNITE
-        // ==============================
+        console.log('🚦 VERDICT DELTA:', delta);
 
-        if (delta >= 8 && score >= 65 && risk <= 50) {
-            return 'INVESTIR';
-        }
+        // =====================================================
+        // 1. RISQUE CRITIQUE
+        // =====================================================
+        //
+        // Ici le prix devient secondaire.
+        //
+        // Si le risque est extrêmement élevé,
+        // Apprexia recommande d'éviter.
+        //
+        // =====================================================
 
-        // ==============================
-        // FORTE SURCOTE
-        // ==============================
-
-        if (delta <= -20) {
+        if (riskLevel >= 80) {
             return 'EVITER';
         }
 
-        // ==============================
-        // SURCOTE
-        // ==============================
+        // =====================================================
+        // 2. SCORE TRÈS FAIBLE
+        // =====================================================
+        //
+        // Un score < 40 signifie que le bien présente
+        // globalement trop peu d'intérêt.
+        //
+        // =====================================================
 
-        if (delta <= -5) {
+        if (score < 40) {
+            return 'EVITER';
+        }
+
+        // =====================================================
+        // 3. EXCELLENTE OPPORTUNITÉ
+        // =====================================================
+        //
+        // Prix inférieur à la valeur Apprexia,
+        // bon score et faible risque.
+        //
+        // =====================================================
+
+        if (delta <= -15 && score >= 70 && riskLevel <= 40 && (yieldRate == null || yieldRate >= 4)) {
+            return 'INVESTIR';
+        }
+
+        // =====================================================
+        // 4. BONNE OPPORTUNITÉ
+        // =====================================================
+
+        if (delta <= -8 && score >= 65 && riskLevel <= 50) {
+            return 'INVESTIR';
+        }
+
+        // =====================================================
+        // 5. PRIX TRÈS SUPÉRIEUR À LA VALEUR
+        // =====================================================
+        //
+        // Une forte surcote ne signifie pas automatiquement
+        // que le bien doit être évité.
+        //
+        // Si les fondamentaux restent corrects, Apprexia
+        // recommande de négocier.
+        //
+        // EVITER uniquement si le score est réellement faible
+        // ou si le niveau de risque est élevé.
+        // =====================================================
+
+        if (delta > 20) {
+            if (score < 45 || riskLevel >= 70) {
+                return 'EVITER';
+            }
+
             return 'NEGOCIER';
         }
+                
+        // =====================================================
+        // 6. SURCOTE MODÉRÉE
+        // =====================================================
 
-        // ==============================
-        // PRIX COHERENT
-        // ==============================
+        if (delta > 5) {
+            if (score >= 50 && riskLevel <= 60) {
+                return 'NEGOCIER';
+            }
 
-        return 'FAVORABLE';
+            return 'EVITER';
+        }
+
+        // =====================================================
+        // 7. PRIX COHÉRENT
+        // =====================================================
+
+        if (delta >= -5 && delta <= 5) {
+            // Très bon bien au prix du marché
+            if (score >= 70 && riskLevel <= 40 && (yieldRate == null || yieldRate >= 4)) {
+                return 'INVESTIR';
+            }
+
+            // Bien intéressant mais pas suffisamment
+            // exceptionnel pour INVESTIR immédiatement
+            if (score >= 50 && riskLevel <= 60) {
+                return 'NEGOCIER';
+            }
+
+            return 'EVITER';
+        }
+
+        // =====================================================
+        // 8. SOUS-ÉVALUATION MODÉRÉE
+        // =====================================================
+
+        if (delta < -5) {
+            if (score >= 55 && riskLevel <= 60) {
+                return 'NEGOCIER';
+            }
+
+            return 'EVITER';
+        }
+
+        // =====================================================
+        // FALLBACK
+        // =====================================================
+
+        return 'NEGOCIER';
     }
 }
