@@ -29,7 +29,18 @@ export class CommuneEngineService {
         const propertyTaxRate = commune.propertyTaxRate ?? null;
 
         // =========================================================
-        // SCORES
+        // SCORES INTERNES
+        //
+        // Chaque catégorie possède son propre poids dans le score
+        // global sur 100.
+        //
+        // Immobilier       : 35 points
+        // Démographie      : 20 points
+        // Qualité de vie   : 20 points
+        // Environnement    : 15 points
+        // Fiscalité        : 10 points
+        //
+        // TOTAL             : 100 points
         // =========================================================
 
         let realEstate = 0;
@@ -47,7 +58,10 @@ export class CommuneEngineService {
 
         let realEstateDataAvailable = false;
 
+        // ---------------------------------------------------------
         // Évolution des prix
+        // ---------------------------------------------------------
+
         if (priceEvolution !== null) {
             realEstateDataAvailable = true;
 
@@ -74,7 +88,10 @@ export class CommuneEngineService {
             }
         }
 
+        // ---------------------------------------------------------
         // Liquidité du marché
+        // ---------------------------------------------------------
+
         if (dvfTransactions !== null) {
             realEstateDataAvailable = true;
 
@@ -97,6 +114,7 @@ export class CommuneEngineService {
             }
         }
 
+        // Sécurité supplémentaire sur le plafond interne.
         realEstate = Math.min(realEstate, 35);
 
         // =========================================================
@@ -105,15 +123,20 @@ export class CommuneEngineService {
 
         let demographicsDataAvailable = false;
 
+        // ---------------------------------------------------------
         // Population
+        // ---------------------------------------------------------
+
         if (population !== null) {
             demographicsDataAvailable = true;
 
             if (population >= 50000) {
                 demographics += 10;
+
                 strengths.push('Commune à forte population');
             } else if (population >= 20000) {
                 demographics += 8;
+
                 strengths.push('Bassin de population significatif');
             } else if (population >= 10000) {
                 demographics += 7;
@@ -124,7 +147,10 @@ export class CommuneEngineService {
             }
         }
 
+        // ---------------------------------------------------------
         // Évolution démographique
+        // ---------------------------------------------------------
+
         if (evolutionPopulation !== null) {
             demographicsDataAvailable = true;
 
@@ -157,12 +183,16 @@ export class CommuneEngineService {
 
         let qualityOfLifeDataAvailable = false;
 
+        // ---------------------------------------------------------
         // Fibre
+        // ---------------------------------------------------------
+
         if (fiberCoverage !== null) {
             qualityOfLifeDataAvailable = true;
 
             if (fiberCoverage >= 90) {
                 qualityOfLife += 7;
+
                 strengths.push('Excellente couverture fibre');
             } else if (fiberCoverage >= 70) {
                 qualityOfLife += 5;
@@ -175,30 +205,40 @@ export class CommuneEngineService {
             }
         }
 
+        // ---------------------------------------------------------
         // Écoles
+        // ---------------------------------------------------------
+
         if (schoolIndex !== null) {
             qualityOfLifeDataAvailable = true;
 
             if (schoolIndex >= 120) {
                 qualityOfLife += 7;
+
                 strengths.push('Très bonne offre scolaire');
             } else if (schoolIndex >= 100) {
                 qualityOfLife += 6;
+
                 strengths.push('Bonne offre scolaire');
             } else if (schoolIndex >= 80) {
                 qualityOfLife += 4;
             } else {
                 qualityOfLife += 2;
+
                 weaknesses.push('Offre scolaire limitée');
             }
         }
 
+        // ---------------------------------------------------------
         // Médecins
+        // ---------------------------------------------------------
+
         if (doctorAccess !== null) {
             qualityOfLifeDataAvailable = true;
 
             if (doctorAccess >= 3.5) {
                 qualityOfLife += 6;
+
                 strengths.push('Bonne offre médicale');
             } else if (doctorAccess >= 2.5) {
                 qualityOfLife += 4;
@@ -206,6 +246,7 @@ export class CommuneEngineService {
                 qualityOfLife += 2;
             } else {
                 qualityOfLife += 1;
+
                 weaknesses.push('Accès aux soins limité');
             }
         }
@@ -218,7 +259,10 @@ export class CommuneEngineService {
 
         let environmentDataAvailable = false;
 
+        // ---------------------------------------------------------
         // Risque inondation
+        // ---------------------------------------------------------
+
         if (floodRisk !== null) {
             environmentDataAvailable = true;
 
@@ -235,7 +279,10 @@ export class CommuneEngineService {
             }
         }
 
+        // ---------------------------------------------------------
         // Activités ICPE
+        // ---------------------------------------------------------
+
         if (icpeSurface !== null) {
             environmentDataAvailable = true;
 
@@ -252,7 +299,10 @@ export class CommuneEngineService {
             }
         }
 
+        // ---------------------------------------------------------
         // Sites Seveso
+        // ---------------------------------------------------------
+
         if (sevesoSurface !== null) {
             environmentDataAvailable = true;
 
@@ -280,6 +330,7 @@ export class CommuneEngineService {
 
             if (propertyTaxRate < 30) {
                 taxation = 10;
+
                 strengths.push('Fiscalité locale avantageuse');
             } else if (propertyTaxRate < 40) {
                 taxation = 7;
@@ -287,21 +338,22 @@ export class CommuneEngineService {
                 taxation = 5;
             } else {
                 taxation = 2;
+
                 weaknesses.push('Fiscalité locale élevée');
             }
         }
 
         // =========================================================
-        // SCORE BRUT
+        // SCORE GLOBAL BRUT
         // =========================================================
 
         const rawScore = realEstate + demographics + qualityOfLife + environment + taxation;
 
         // =========================================================
-        // NORMALISATION
+        // NORMALISATION DU SCORE GLOBAL
         //
-        // On ne pénalise pas une commune lorsqu'une donnée
-        // environnementale ou fiscale est simplement indisponible.
+        // On ne pénalise pas une commune lorsqu'une catégorie
+        // entière ne dispose d'aucune donnée.
         // =========================================================
 
         let availableMaximum = 0;
@@ -329,7 +381,48 @@ export class CommuneEngineService {
         const score = availableMaximum > 0 ? Math.min(100, Math.round((rawScore / availableMaximum) * 100)) : 0;
 
         // =========================================================
-        // NIVEAU
+        // NORMALISATION DES SOUS-SCORES SUR 20
+        //
+        // L'utilisateur voit TOUJOURS des notes sur 20.
+        //
+        // Les barèmes internes restent :
+        //
+        // Immobilier       : 35
+        // Démographie      : 20
+        // Qualité de vie   : 20
+        // Environnement    : 15
+        // Fiscalité        : 10
+        //
+        // Ils sont ensuite convertis en /20 uniquement pour
+        // l'affichage et la réponse de l'API.
+        // =========================================================
+
+        const realEstateScore = Math.round((realEstate / 35) * 20);
+
+        const demographicsScore = Math.round((demographics / 20) * 20);
+
+        const qualityOfLifeScore = Math.round((qualityOfLife / 20) * 20);
+
+        const environmentScore = Math.round((environment / 15) * 20);
+
+        const taxationScore = Math.round((taxation / 10) * 20);
+
+        // =========================================================
+        // SÉCURITÉ DES SCORES /20
+        // =========================================================
+
+        const normalizedRealEstate = Math.min(20, Math.max(0, realEstateScore));
+
+        const normalizedDemographics = Math.min(20, Math.max(0, demographicsScore));
+
+        const normalizedQualityOfLife = Math.min(20, Math.max(0, qualityOfLifeScore));
+
+        const normalizedEnvironment = Math.min(20, Math.max(0, environmentScore));
+
+        const normalizedTaxation = Math.min(20, Math.max(0, taxationScore));
+
+        // =========================================================
+        // NIVEAU GLOBAL
         // =========================================================
 
         let level: CommuneAnalysis['level'];
@@ -358,11 +451,17 @@ export class CommuneEngineService {
             weaknesses,
 
             breakdown: {
-                realEstate,
-                demographics,
-                accessibility: qualityOfLife,
-                environment,
-                taxation,
+                // TOUS LES SOUS-SCORES SONT MAINTENANT SUR 20
+
+                realEstate: normalizedRealEstate,
+
+                demographics: normalizedDemographics,
+
+                accessibility: normalizedQualityOfLife,
+
+                environment: normalizedEnvironment,
+
+                taxation: normalizedTaxation,
             },
         };
     }
