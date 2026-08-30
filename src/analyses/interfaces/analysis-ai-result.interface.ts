@@ -126,6 +126,9 @@ export interface AnalysisAiResult {
 
     negotiationAnalysis: string;
 
+    estimatedNotaryFees?: number | null;
+    notaryFeeRate?: number | null;
+
     // ===============================
     // Rentabilité locative
     // ===============================

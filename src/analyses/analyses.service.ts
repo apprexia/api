@@ -539,6 +539,8 @@ export class AnalysesService {
                 negotiationAmount: aiResult.negotiationAmount,
                 negotiationPotential: aiResult.negotiationPotential,
                 negotiationAnalysis: aiResult.negotiationAnalysis,
+                estimatedNotaryFees: aiResult.estimatedNotaryFees ?? null,
+                notaryFeeRate: aiResult.notaryFeeRate ?? null,
                 location: locationAnalysis ? (locationAnalysis as unknown as Prisma.InputJsonValue) : undefined,
                 amenities: aiResult.amenities ? (aiResult.amenities as unknown as Prisma.InputJsonValue) : undefined,
                 description: aiResult.description,

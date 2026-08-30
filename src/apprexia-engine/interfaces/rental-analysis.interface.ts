@@ -1,17 +1,17 @@
 export interface RentalAnalysis {
-  estimatedRentMonthly: number;
+    estimatedRentMonthly: number;
 
-  estimatedRentLow: number;
+    estimatedRentLow: number;
 
-  estimatedRentHigh: number;
+    estimatedRentHigh: number;
 
-  rentPerSquareMeter: number;
+    rentPerSquareMeter: number;
 
-  rentConfidence: number;
+    rentConfidence: number;
 
-  grossYield: number;
+    grossYield: number;
 
-  yieldLevel: string;
+    yieldLevel: string;
 
-  yieldAnalysis: string;
+    yieldAnalysis: string;
 }

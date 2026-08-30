@@ -20,6 +20,7 @@ import { GeocodingProviderService } from './providers/geocoding-provider/geocodi
 import { CommuneEngineService } from './engines/commune-engine/commune-engine.service';
 import { EnergyEngineService } from './engines/energy-engine/energy-engine.service';
 import { RiskEngineService } from './engines/risk-engine/risk-engine.service';
+import { AcquisitionCostEngineService } from './engines/acquisition-cost-engine/acquisition-cost-engine.service';
 
 @Module({
     imports: [HttpModule, RentalMarketModule],
@@ -43,6 +44,7 @@ import { RiskEngineService } from './engines/risk-engine/risk-engine.service';
         CommuneEngineService,
         EnergyEngineService,
         RiskEngineService,
+        AcquisitionCostEngineService
     ],
     exports: [
         ApprexiaEngineService,
@@ -52,6 +54,7 @@ import { RiskEngineService } from './engines/risk-engine/risk-engine.service';
         AmenityEngineService,
         EnergyEngineService,
         RiskEngineService,
+        AcquisitionCostEngineService
     ],
 })
 export class ApprexiaEngineModule {}

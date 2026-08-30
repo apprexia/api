@@ -99,9 +99,10 @@ model Analysis {
   estimatedValueLow  Float?
   estimatedValueHigh Float?
 
-  askingPrice      Float?
-  recommendedPrice Float?
-
+  askingPrice          Float?
+  recommendedPrice     Float?
+  estimatedNotaryFees  Decimal? @db.Decimal(12, 2)
+  notaryFeeRate        Decimal? @db.Decimal(6, 4)
   negotiationAmount    Float?
   negotiationPotential Int?
   negotiationAnalysis  String?

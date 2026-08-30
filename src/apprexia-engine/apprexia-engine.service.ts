@@ -10,7 +10,7 @@ import { RentalEngineService } from './engines/rental-engine/rental-engine.servi
 import { PropertyValueAdjustmentEngineService } from './engines/property-value-adjustment/property-value-adjustment.service';
 import { CommuneEngineService } from './engines/commune-engine/commune-engine.service';
 import { EnergyEngineService } from './engines/energy-engine/energy-engine.service';
-
+import { AcquisitionCostEngineService } from './engines/acquisition-cost-engine/acquisition-cost-engine.service';
 import { AnalysisAiResult } from '../analyses/interfaces/analysis-ai-result.interface';
 
 @Injectable()
@@ -24,6 +24,7 @@ export class ApprexiaEngineService {
         private readonly propertyValueAdjustmentEngine: PropertyValueAdjustmentEngineService,
         private readonly communeEngine: CommuneEngineService,
         private readonly energyEngine: EnergyEngineService,
+        private readonly acquisitionCostEngine: AcquisitionCostEngineService,
     ) {}
 
     async evaluate(context: EngineContext): Promise<AnalysisAiResult> {
@@ -203,6 +204,17 @@ export class ApprexiaEngineService {
         });
 
         console.log('💰 PRICE RECOMMENDATION:', recommendation);
+
+        // =====================================================
+        // 4.1 FRAIS D'ACQUISITION
+        // =====================================================
+
+        const acquisitionCosts = this.acquisitionCostEngine.compute({
+            price: recommendation.recommendedPrice,
+            propertyCondition: context.metadata.propertyCondition,
+        });
+
+        console.log('🏠 ACQUISITION COSTS:', acquisitionCosts);
 
         // =====================================================
         // 5. RENTABILITÉ LOCATIVE
@@ -387,6 +399,14 @@ export class ApprexiaEngineService {
             negotiationAmount: recommendation.negotiationAmount,
 
             negotiationPotential: recommendation.negotiationPotential,
+
+            // -------------------------------------------------
+            // FRAIS D'ACQUISITION
+            // -------------------------------------------------
+
+            estimatedNotaryFees: acquisitionCosts.notaryFees,
+
+            notaryFeeRate: acquisitionCosts.notaryFeeRate,
 
             // -------------------------------------------------
             // RENTABILITÉ
