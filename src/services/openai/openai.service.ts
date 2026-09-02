@@ -1349,85 +1349,199 @@ comprendre POURQUOI le score est ainsi.
 
   Mais tu ne dois jamais exposer la mécanique de calcul.
 
-====================================================
-  EXPLICATION DU VERDICT
-====================================================
+        ====================================================
+          EXPLICATION DU VERDICT
+        ====================================================
 
-  Verdict officiel :
+          Verdict officiel :
 
-  ${engineResult.verdict}
+          ${engineResult.verdict}
 
-Explique ce verdict de manière immédiatement
-compréhensible.
+        Explique ce verdict de manière immédiatement
+        compréhensible.
 
-----------------------------------------------------
-  INVESTIR
-----------------------------------------------------
+          Le verdict fourni ci-dessus est la décision officielle
+        d'Apprexia.
 
-  Si le verdict est INVESTIR :
+        Tu dois impérativement respecter ce verdict.
 
-  Explique simplement pourquoi le bien présente un
-ensemble de caractéristiques favorables.
+          Ne jamais transformer un verdict FAVORABLE en NEGOCIER.
 
-  Ne dis pas :
+          Ne jamais transformer un verdict FAVORABLE en INVESTIR.
 
-  "Le moteur recommande d'investir."
+          Ne jamais transformer un verdict NEGOCIER en FAVORABLE.
 
-Dis plutôt :
+          Ne jamais transformer un verdict EVITER en NEGOCIER.
 
-  "Les éléments analysés sont globalement favorables,
-notamment..."
+        ----------------------------------------------------
+          FAVORABLE
+        ----------------------------------------------------
 
-----------------------------------------------------
-  OPPORTUNITE
-----------------------------------------------------
+          Si le verdict est FAVORABLE :
 
-  Si le verdict est OPPORTUNITE :
+          Explique que le bien présente globalement un profil
+        intéressant et cohérent au regard des éléments analysés.
 
-  Explique simplement pourquoi le bien présente une
-opportunité particulière.
+          Tu peux notamment t'appuyer sur :
 
-----------------------------------------------------
-  NEGOCIER
-----------------------------------------------------
+        - un prix cohérent ou inférieur à la valeur estimée ;
+        - un bon score global ;
+        - un niveau de risque raisonnable ;
+        - une rentabilité intéressante lorsqu'elle est fournie ;
+        - des caractéristiques positives du bien ;
+        - une bonne situation de marché lorsque cela est fourni.
 
-  Si le verdict est NEGOCIER :
+          IMPORTANT :
 
-  Explique simplement :
+        FAVORABLE ne signifie PAS que le bien est parfait.
 
-  - que le prix demandé est supérieur au prix recommandé,
-  si c'est bien le cas ;
-- qu'une négociation est donc conseillée ;
-- que le bien peut malgré tout avoir des qualités.
+          FAVORABLE ne signifie PAS qu'il faut obligatoirement
+        acheter le bien.
 
-  Exemple de formulation :
+          FAVORABLE ne signifie PAS que l'achat est sans risque.
 
-  "Nous vous conseillons de négocier le prix. Le bien est
-affiché à 329 000 €, tandis que la valeur recommandée
-est de 272 862 €. Le bien présente néanmoins plusieurs
-points positifs, notamment son état neuf et son excellent
-DPE."
+        FAVORABLE signifie que les éléments analysés sont
+        globalement positifs ou cohérents.
 
-IMPORTANT :
+          Exemple :
 
-  Ne dis jamais que le bien est mauvais.
+        "Le bien présente un profil globalement favorable.
+        Son prix se situe dans une fourchette cohérente avec sa
+        valeur estimée et plusieurs éléments de l'analyse sont
+        positifs."
 
-  Ne dis jamais que le vendeur acceptera la négociation.
+        Si le prix est inférieur à la valeur estimée et que
+        cela est explicitement fourni :
 
-  Ne présente jamais le prix recommandé comme une garantie.
+          "Le prix demandé est inférieur à la valeur estimée du
+        bien, ce qui constitue un élément favorable."
 
-----------------------------------------------------
-  EVITER
-----------------------------------------------------
+        IMPORTANT :
 
-  Si le verdict est EVITER :
+          Ne dis pas que le bien est "sous-évalué" si la position
+        marché officielle ne l'indique pas.
 
-  Explique uniquement les éléments clairement défavorables
-qui justifient le résultat.
+        Ne dis pas que le bien est "une excellente affaire"
+        si cette conclusion n'est pas explicitement justifiée
+        par les données.
 
-  Ne dramatise pas.
+        ----------------------------------------------------
+          INVESTIR
+        ----------------------------------------------------
 
-  N'invente aucun problème.
+          Si le verdict est INVESTIR :
+
+          Explique simplement pourquoi le bien présente un
+        ensemble de caractéristiques particulièrement favorables.
+
+          Ne dis pas :
+
+          "Le moteur recommande d'investir."
+
+        Dis plutôt :
+
+          "Les éléments analysés sont particulièrement favorables,
+        notamment..."
+
+        IMPORTANT :
+
+          INVESTIR correspond à un niveau d'opportunité supérieur
+        à FAVORABLE.
+
+          Ne transforme pas automatiquement INVESTIR en
+        FAVORABLE dans ton explication.
+
+        ----------------------------------------------------
+          NEGOCIER
+        ----------------------------------------------------
+
+          Si le verdict est NEGOCIER :
+
+          Explique simplement :
+
+          - que le prix demandé est supérieur au prix recommandé,
+          si c'est bien le cas ;
+        - qu'une négociation est donc conseillée ;
+        - que le bien peut malgré tout avoir des qualités.
+
+          Exemple de formulation :
+
+          "Nous vous conseillons de négocier le prix. Le bien est
+        affiché à 329 000 €, tandis que la valeur recommandée est
+        de 272 862 €. Le bien présente néanmoins plusieurs points
+        positifs."
+
+        IMPORTANT :
+
+          Ne dis jamais que le bien est mauvais.
+
+          Ne dis jamais que le vendeur acceptera la négociation.
+
+          Ne présente jamais le prix recommandé comme une garantie.
+
+          Si le montant de négociation est égal à 0 € ou si aucun
+        montant de négociation n'est fourni, ne prétends pas qu'une
+        baisse chiffrée est recommandée.
+
+          Dans ce cas, utilise plutôt une formulation prudente
+        comme :
+
+          "Le prix apparaît cohérent avec les éléments analysés.
+        Une négociation peut néanmoins être envisagée en fonction
+        des caractéristiques du bien et du contexte de la vente."
+
+        ----------------------------------------------------
+          EVITER
+        ----------------------------------------------------
+
+          Si le verdict est EVITER :
+
+          Explique uniquement les éléments clairement défavorables
+        qui justifient le résultat.
+
+          Ne dramatise pas.
+
+          N'invente aucun problème.
+
+        Ne transforme jamais une information inconnue en risque.
+
+        ====================================================
+          RÈGLE DE COHÉRENCE ENTRE VERDICT ET EXPLICATION
+        ====================================================
+
+          Le verdict officiel est prioritaire sur toute autre
+        information.
+
+          Si :
+
+        Verdict = FAVORABLE
+
+        alors verdictExplanation doit présenter le résultat
+        comme globalement positif ou cohérent.
+
+          Si :
+
+        Verdict = INVESTIR
+
+        alors verdictExplanation doit présenter le résultat
+        comme une opportunité particulièrement favorable.
+
+          Si :
+
+        Verdict = NEGOCIER
+
+        alors verdictExplanation doit expliquer pourquoi une
+        discussion sur le prix peut être pertinente.
+
+          Si :
+
+        Verdict = EVITER
+
+        alors verdictExplanation doit expliquer les principaux
+        éléments défavorables.
+
+          Ne crée jamais une contradiction entre le verdict
+        officiel et son explication.
 
 ====================================================
   POSITION DU PRIX
@@ -1727,40 +1841,6 @@ Ne retourne aucune autre propriété.
         this.logger.log(`explain GPT-5-mini: ${Date.now() - start}ms`);
 
         return response.output_text;
-    }
-
-    private calculatePriceGap(askingPrice: number, marketData: DvfMarketData) {
-        const { dvfReferenceValue, lowEstimate, highEstimate } = marketData;
-
-        const gapVsDvf = dvfReferenceValue > 0 ? ((askingPrice - dvfReferenceValue) / dvfReferenceValue) * 100 : null;
-
-        const gapVsLow = lowEstimate > 0 ? ((askingPrice - lowEstimate) / lowEstimate) * 100 : null;
-
-        const gapVsHigh = highEstimate > 0 ? ((askingPrice - highEstimate) / highEstimate) * 100 : null;
-
-        return {
-            askingPrice,
-            dvfReferenceValue,
-            lowEstimate,
-            highEstimate,
-
-            amountVsDvf: askingPrice - dvfReferenceValue,
-            amountVsLow: askingPrice - lowEstimate,
-            amountVsHigh: askingPrice - highEstimate,
-
-            gapVsDvfPercent: gapVsDvf !== null ? Number(gapVsDvf.toFixed(2)) : null,
-
-            gapVsLowPercent: gapVsLow !== null ? Number(gapVsLow.toFixed(2)) : null,
-
-            gapVsHighPercent: gapVsHigh !== null ? Number(gapVsHigh.toFixed(2)) : null,
-
-            position:
-                askingPrice < lowEstimate
-                    ? 'SOUS_EVALUE'
-                    : askingPrice <= highEstimate
-                      ? 'DANS_FOURCHETTE'
-                      : 'AU_DESSUS_FOURCHETTE',
-        };
     }
 
     async verifyExtractedMetadata(input: {
