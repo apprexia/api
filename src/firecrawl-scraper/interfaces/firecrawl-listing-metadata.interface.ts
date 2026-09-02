@@ -47,6 +47,7 @@ export interface FirecrawlResponse {
     success: boolean;
 
     data?: {
+        html?: string;
         markdown?: string;
         metadata?: Record<string, any>;
     };

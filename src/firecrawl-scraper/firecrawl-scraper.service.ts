@@ -1,7 +1,8 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 
 import axios, { AxiosError, AxiosInstance } from 'axios';
-
+import * as cheerio from 'cheerio';
+import { CheerioAPI } from 'cheerio';
 import { FirecrawlListingMetadata, FirecrawlResponse } from './interfaces/firecrawl-listing-metadata.interface';
 
 import { ListingMetadata } from '../meta-data-scrapper/interfaces/listing-metadata.interface';
@@ -94,6 +95,7 @@ export class FirecrawlScraperService {
         }
 
         const platform = this.getPlatform(url);
+        const isLeboncoin = platform === 'leboncoin';
 
         this.logger.log(`🔥 Firecrawl [${platform ?? 'unknown'}] → ${url}`);
 
@@ -102,8 +104,15 @@ export class FirecrawlScraperService {
         try {
             const response = await this.client.post<FirecrawlResponse>('/scrape', {
                 url,
-                formats: ['markdown'],
-                onlyMainContent: true,
+
+                // Leboncoin : HTML brut
+                // Autres plateformes : Markdown
+                formats: isLeboncoin ? ['html'] : ['markdown'],
+
+                // Pour Leboncoin on veut pouvoir exploiter
+                // les éléments Diagnostics, données structurées, etc.
+                onlyMainContent: !isLeboncoin,
+
                 waitFor: 3000,
             });
 
@@ -117,33 +126,39 @@ export class FirecrawlScraperService {
                 throw new Error(result?.error || 'Firecrawl a retourné success=false');
             }
 
-            const markdown = result?.data?.markdown || '';
+            // =============================================================
+            // CONTENU
+            // =============================================================
 
-            if (!markdown.trim()) {
-                throw new Error('Firecrawl n’a retourné aucun markdown');
+            const content = isLeboncoin ? result?.data?.html || '' : result?.data?.markdown || '';
+
+            if (!content.trim()) {
+                throw new Error(`Firecrawl n’a retourné aucun ${isLeboncoin ? 'HTML' : 'markdown'}`);
             }
 
-            this.logger.log(`🔥 Markdown récupéré : ${markdown.length} caractères`);
+            this.logger.log(`🔥 ${isLeboncoin ? 'HTML' : 'Markdown'} récupéré : ${content.length} caractères`);
 
-            // -------------------------------------------------------------
-            // Challenge DataDome / captcha
-            // -------------------------------------------------------------
+            // =============================================================
+            // CHALLENGE DATADOME
+            // =============================================================
 
-            const challengeDetected = this.containsChallenge(markdown);
+            const challengeDetected = this.containsChallenge(content);
 
             if (challengeDetected) {
                 this.logger.warn(`⚠️ Challenge détecté dans la réponse Firecrawl [${platform}]`);
             }
 
-            // -------------------------------------------------------------
-            // Extraction déterministe
-            // -------------------------------------------------------------
+            // =============================================================
+            // EXTRACTION
+            // =============================================================
 
-            const metadata = this.extractMetadata(markdown, result?.data?.metadata, url, platform);
+            const metadata = isLeboncoin
+                ? this.extractLeboncoinMetadata(content, result?.data?.metadata, url)
+                : this.extractMetadata(content, result?.data?.metadata, url, platform);
 
-            // -------------------------------------------------------------
-            // Vérification / enrichissement OpenAI
-            // -------------------------------------------------------------
+            // =============================================================
+            // OPENAI
+            // =============================================================
 
             const verified = await this.openAiService.verifyExtractedMetadata({
                 url,
@@ -152,7 +167,7 @@ export class FirecrawlScraperService {
 
                 description: metadata.description ?? '',
 
-                body: markdown,
+                body: content,
 
                 extracted: {
                     address: metadata.address,
@@ -181,11 +196,9 @@ export class FirecrawlScraperService {
                 },
             });
 
-            this.logger.log(`🤖 Métadonnées vérifiées par OpenAI : ${JSON.stringify(verified, null, 2)}`);
-
-            // -------------------------------------------------------------
-            // Résultat final
-            // -------------------------------------------------------------
+            // =============================================================
+            // RÉSULTAT FINAL
+            // =============================================================
 
             return {
                 ...metadata,
@@ -200,7 +213,8 @@ export class FirecrawlScraperService {
 
                 typeLocal: verified.typeLocal ?? metadata.typeLocal,
 
-                propertyCondition: verified.propertyCondition ?? metadata.propertyCondition,
+                propertyCondition:
+                    metadata.propertyCondition !== 'INCONNU' ? metadata.propertyCondition : verified.propertyCondition,
 
                 surface: verified.surface ?? metadata.surface,
 
@@ -225,6 +239,255 @@ export class FirecrawlScraperService {
 
             throw error;
         }
+    }
+
+    private extractLeboncoinMetadata(
+        html: string,
+        firecrawlMetadata: Record<string, any> | undefined,
+        url: string,
+    ): ListingMetadata {
+        const $ = cheerio.load(html);
+
+        // =============================================================
+        // TITLE
+        // =============================================================
+
+        const title =
+            $('[data-qa-id="adview_title"]').first().text().trim() ||
+            $('h1').first().text().trim() ||
+            firecrawlMetadata?.title;
+
+        // =============================================================
+        // DESCRIPTION
+        // =============================================================
+
+        const description = $('[data-qa-id="adview_description_container"]').first().text().trim() || '';
+
+        // =============================================================
+        // PRICE
+        // =============================================================
+
+        const text = $.root().text().replace(/\s+/g, ' ').trim();
+
+        const price = this.extractPrice(text, 'leboncoin');
+
+        // =============================================================
+        // SURFACE / PIÈCES
+        // =============================================================
+
+        const summary = $('p.text-body-1')
+            .filter((_, element) => $(element).text().includes('m²'))
+            .first()
+            .text()
+            .trim();
+
+        const surface = this.extractSurface(summary);
+
+        const rooms = this.extractRooms(summary);
+
+        // =============================================================
+        // LOCALISATION
+        // =============================================================
+
+        const locationElement = $('a[href*="#map"]').first();
+
+        const locationText = locationElement.text().trim();
+
+        const city = this.extractCity(locationText, 'leboncoin');
+
+        const codePostal = this.extractPostalCode(locationText);
+
+        // =============================================================
+        // DPE
+        // =============================================================
+
+        const dpe = this.extractLeboncoinEnergyClass($);
+
+        // =============================================================
+        // GES
+        // =============================================================
+
+        const ges = this.extractLeboncoinGesClass($);
+
+        // =============================================================
+        // TYPE + ANCIEN / NEUF
+        // =============================================================
+
+        const propertyCondition = this.extractLeboncoinPropertyCondition($);
+
+        const typeLocal = this.extractLeboncoinPropertyType($);
+
+        // =============================================================
+        // CONSTRUCTION
+        // =============================================================
+
+        const constructionYear = this.extractConstructionYear($.root().text());
+
+        // =============================================================
+        // RESULTAT
+        // =============================================================
+
+        const extracted: FirecrawlListingMetadata = {
+            title,
+
+            description,
+
+            price,
+
+            surface,
+
+            rooms,
+
+            city,
+
+            codePostal,
+
+            typeLocal,
+
+            dpe,
+
+            ges,
+
+            images: this.extractImages(html, 'leboncoin', firecrawlMetadata),
+
+            propertyFeatures: this.extractFeatures($.root().text()),
+
+            propertyCondition,
+
+            constructionYear,
+
+            floor: this.extractFloor($.root().text()),
+
+            totalFloors: this.extractTotalFloors($.root().text()),
+
+            heatingType: this.extractHeating($.root().text()),
+
+            charges: this.extractCharges($.root().text()),
+
+            reference: this.extractReference($.root().text()),
+
+            sellerName: this.extractSellerName($.root().text()),
+
+            sellerSiret: this.extractSiret($.root().text()),
+        };
+
+        return this.mapToListingMetadata(this.removeUndefinedValues(extracted), url);
+    }
+
+    private extractLeboncoinEnergyClass($: cheerio.CheerioAPI): string | undefined {
+        const container = $('[data-qa-id="criteria_item_energy_rate"]').first();
+
+        if (!container.length) {
+            return undefined;
+        }
+
+        const selected = container
+            .find('div')
+            .filter((_, element) => {
+                const value = $(element).text().trim();
+
+                const className = $(element).attr('class') ?? '';
+
+                return /^[A-G]$/.test(value) && className.includes('border-md') && className.includes('border-surface');
+            })
+            .first();
+
+        const value = selected.text().trim();
+
+        return /^[A-G]$/.test(value) ? value : undefined;
+    }
+
+    private extractLeboncoinGesClass($: cheerio.CheerioAPI): string | undefined {
+        const container = $('[data-qa-id="criteria_item_ges"]').first();
+
+        if (!container.length) {
+            return undefined;
+        }
+
+        const selected = container
+            .find('div')
+            .filter((_, element) => {
+                const value = $(element).text().trim();
+
+                const className = $(element).attr('class') ?? '';
+
+                return /^[A-G]$/.test(value) && className.includes('border-md') && className.includes('border-surface');
+            })
+            .first();
+
+        const value = selected.text().trim();
+
+        return /^[A-G]$/.test(value) ? value : undefined;
+    }
+
+    private extractLeboncoinPropertyCondition($: cheerio.CheerioAPI): 'NEUF' | 'ANCIEN' | 'INCONNU' {
+        const html = $.html();
+
+        if (/property_nature\s*=\s*new/i.test(html)) {
+            this.logger.log('🏠 Leboncoin propertyCondition détecté : NEUF');
+
+            return 'NEUF';
+        }
+
+        if (/property_nature\s*=\s*old/i.test(html)) {
+            this.logger.log('🏠 Leboncoin propertyCondition détecté : ANCIEN');
+
+            return 'ANCIEN';
+        }
+
+        this.logger.warn('⚠️ Leboncoin propertyCondition non détecté');
+
+        return 'INCONNU';
+    }
+
+    private extractLeboncoinPropertyType($: cheerio.CheerioAPI): string | undefined {
+        let propertyType: string | undefined;
+
+        $('a[href*="property_type="]').each((_, element) => {
+            if (propertyType) {
+                return;
+            }
+
+            const href = $(element).attr('href');
+
+            if (!href) {
+                return;
+            }
+
+            try {
+                const url = new URL(href, 'https://www.leboncoin.fr');
+                const value = url.searchParams.get('property_type');
+
+                if (!value) {
+                    return;
+                }
+
+                switch (value.toLowerCase()) {
+                    case 'apartment':
+                        propertyType = 'Appartement';
+                        break;
+
+                    case 'house':
+                        propertyType = 'Maison';
+                        break;
+
+                    case 'building':
+                        propertyType = 'Immeuble';
+                        break;
+
+                    case 'land':
+                        propertyType = 'Terrain';
+                        break;
+
+                    default:
+                        propertyType = value;
+                }
+            } catch {
+                // URL invalide : on ignore
+            }
+        });
+
+        return propertyType;
     }
 
     // =========================================================================
@@ -756,6 +1019,22 @@ export class FirecrawlScraperService {
 
             if (price >= 10_000 && price <= 100_000_000) {
                 return price;
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Fallback spécifique Leboncoin
+        // -------------------------------------------------------------
+
+        if (platform === 'leboncoin') {
+            const leboncoinPrice = text.match(/(?:^|\s)([\d\s.\u00A0\u202F]{4,})\s*€(?:\s|$)/);
+
+            if (leboncoinPrice?.[1]) {
+                const price = Number(leboncoinPrice[1].replace(/[^\d]/g, ''));
+
+                if (price >= 10_000 && price <= 100_000_000) {
+                    return price;
+                }
             }
         }
 
