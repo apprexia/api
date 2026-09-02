@@ -2077,12 +2077,11 @@ Ne retourne aucune autre propriété.
                 
                 => typeLocal = "Appartement"
                 
-            ════════════════════════════════════
+════════════════════════════════════
 PRIORITÉ ÉLEVÉE — PROPERTY CONDITION
 ════════════════════════════════════
 
-propertyCondition représente la catégorie globale du bien selon son
-caractère neuf ou ancien.
+propertyCondition représente le caractère NEUF ou ANCIEN du bien vendu.
 
 Valeurs autorisées uniquement :
 
@@ -2090,17 +2089,31 @@ Valeurs autorisées uniquement :
 - ANCIEN
 - INCONNU
 
+IMPORTANT :
+propertyCondition ne décrit PAS l'état général du bien.
+
+Il ne faut jamais confondre :
+
+propertyCondition :
+- NEUF
+- ANCIEN
+- INCONNU
+
+avec condition :
+- NEUF
+- EXCELLENT
+- BON
+- A_RAFRAICHIR
+- A_RENOVER
+
 ────────────────────────────
-NEUF
+RÈGLE ABSOLUE — NEUF
 ────────────────────────────
 
-Retourne :
+Retourne "NEUF" UNIQUEMENT si l'annonce contient une preuve
+EXPLICITE que le bien est vendu comme un bien neuf.
 
-propertyCondition = "NEUF"
-
-uniquement lorsqu'une preuve explicite indique que le bien est neuf.
-
-Exemples :
+Preuves acceptées :
 
 "Appartement neuf"
 → NEUF
@@ -2108,30 +2121,75 @@ Exemples :
 "Maison neuve"
 → NEUF
 
-"Programme neuf"
+"Bien neuf"
 → NEUF
 
-"Logement neuf jamais habité"
+"Programme neuf"
 → NEUF
 
 "Construction neuve"
 → NEUF
 
+"Logement neuf jamais habité"
+→ NEUF
+
 "VEFA"
+→ NEUF
+
+"Vente en état futur d'achèvement"
+→ NEUF
+
+"Première occupation"
+→ NEUF
+
+"Première mise en vente"
 → NEUF
 
 "Livraison prévue en 2027"
 → NEUF
 
+"Livraison prochaine"
+→ NEUF
+
+
 ────────────────────────────
-ANCIEN
+RÈGLE ABSOLUE — ANNÉE DE CONSTRUCTION
 ────────────────────────────
 
-Retourne :
+L'année de construction NE PERMET JAMAIS À ELLE SEULE
+de conclure que le bien est NEUF.
 
-propertyCondition = "ANCIEN"
+Exemples :
 
-lorsque l'annonce décrit clairement un bien existant ou ancien.
+"Appartement construit en 2022"
+→ NE PAS conclure NEUF
+
+"Maison construite en 2024"
+→ NE PAS conclure NEUF
+
+"Construction datant de 2022"
+→ NE PAS conclure NEUF
+
+"Immeuble construit en 2023"
+→ NE PAS conclure NEUF
+
+Une année de construction décrit l'âge du bâtiment.
+Elle ne constitue PAS une preuve que le bien est actuellement
+commercialisé comme un bien neuf.
+
+Si seule l'année de construction est connue :
+
+→ propertyCondition = "INCONNU"
+
+SAUF si une autre preuve explicite permet de conclure NEUF.
+
+
+────────────────────────────
+RÈGLE — ANCIEN
+────────────────────────────
+
+Retourne "ANCIEN" lorsqu'une preuve indique clairement
+que le bien est existant ou ancien.
 
 Exemples :
 
@@ -2141,48 +2199,113 @@ Exemples :
 "Maison ancienne"
 → ANCIEN
 
-"Appartement datant de 1970"
+"Appartement construit en 1970"
 → ANCIEN
 
-"Maison construite en 1985"
-→ ANCIEN
-
-"Appartement ancien entièrement rénové"
+"Maison datant de 1985"
 → ANCIEN
 
 "Appartement rénové"
 → ANCIEN
 
+"Appartement entièrement rénové"
+→ ANCIEN
+
+"Appartement refait à neuf"
+→ ANCIEN
+
 IMPORTANT :
 
-Un bien ancien rénové reste un bien ANCIEN.
+"rénové"
+"entièrement rénové"
+"refait à neuf"
+"comme neuf"
 
-"Entièrement rénové" ne signifie PAS "NEUF".
+ne signifient PAS que le bien est neuf.
+
+Un bien ancien entièrement rénové reste un bien ANCIEN.
+
 
 ────────────────────────────
 INCONNU
 ────────────────────────────
 
-Retourne :
+Retourne "INCONNU" lorsqu'aucune preuve suffisamment fiable
+ne permet de déterminer le caractère neuf ou ancien du bien.
 
+En cas de doute :
+
+→ INCONNU
+
+
+────────────────────────────
+INTERDICTION DE DÉDUCTION
+────────────────────────────
+
+Ne jamais retourner NEUF uniquement parce que le bien est :
+
+- récent
+- très récent
+- construit récemment
+- construit en 2022
+- construit en 2023
+- construit en 2024
+- moderne
+- rénové
+- entièrement rénové
+- refait à neuf
+- comme neuf
+- en excellent état
+- haut de gamme
+- luxueux
+
+
+────────────────────────────
+CONFLIT AVEC L'EXTRACTION AUTOMATIQUE
+────────────────────────────
+
+Les données extraites automatiquement sont des hypothèses.
+
+Si l'annonce contient une preuve explicite, l'annonce est prioritaire.
+
+Si aucune preuve explicite n'est présente :
+
+- ne transforme jamais INCONNU en NEUF sur la base d'une simple année ;
+- ne transforme jamais INCONNU en NEUF sur la base de l'état du bien ;
+- en cas de doute, retourne INCONNU.
+
+Exemple :
+
+Donnée automatique :
 propertyCondition = "INCONNU"
 
-lorsqu'aucune information suffisamment fiable ne permet de déterminer
-si le bien est neuf ou ancien.
+Annonce :
+"Appartement construit en 2022"
 
-Ne jamais déduire qu'un bien est neuf uniquement parce que :
+Résultat :
+propertyCondition = "INCONNU"
 
-- il est en excellent état ;
-- il est rénové ;
-- il est refait à neuf ;
-- il est moderne ;
-- il possède des prestations haut de gamme ;
-- il est présenté comme "comme neuf".
 
-"Refait à neuf" peut décrire un bien ancien entièrement rénové.
+Donnée automatique :
+propertyCondition = "INCONNU"
 
-En cas de doute réel :
-→ INCONNU
+Annonce :
+"Appartement neuf jamais habité"
+
+Résultat :
+propertyCondition = "NEUF"
+corrected = true
+
+
+Donnée automatique :
+propertyCondition = "NEUF"
+
+Annonce :
+"Appartement construit en 1970, entièrement rénové"
+
+Résultat :
+propertyCondition = "ANCIEN"
+corrected = true
 
 ────────────────────────────
 CONFLIT AVEC L'EXTRACTION AUTOMATIQUE
@@ -3055,6 +3178,63 @@ Retourne uniquement le JSON demandé.
 
         try {
             const result = JSON.parse(content);
+            const aiPropertyCondition =
+                result.propertyCondition === 'NEUF' ||
+                result.propertyCondition === 'ANCIEN' ||
+                result.propertyCondition === 'INCONNU'
+                    ? result.propertyCondition
+                    : 'INCONNU';
+
+            const evidence =
+                typeof result.propertyConditionEvidence === 'string'
+                    ? result.propertyConditionEvidence.trim().toLowerCase()
+                    : '';
+
+            const explicitNewPatterns = [
+                /\bappartement neuf\b/,
+                /\bmaison neuve\b/,
+                /\bbien neuf\b/,
+                /\bprogramme neuf\b/,
+                /\bprogramme immobilier neuf\b/,
+                /\bconstruction neuve\b/,
+                /\bresidence neuve\b/,
+                /\bvefa\b/,
+                /\bvente en etat futur d achevement\b/,
+                /\bjamais habite\b/,
+                /\bpremiere occupation\b/,
+                /\bpremiere mise en vente\b/,
+                /\blivraison prevue\b/,
+                /\blivraison prochaine\b/,
+            ];
+
+            let propertyCondition = input.extracted.propertyCondition ?? 'INCONNU';
+
+            if (aiPropertyCondition === 'NEUF') {
+                const hasExplicitNewEvidence =
+                    explicitNewPatterns.some((pattern) => pattern.test(evidence)) ||
+                    explicitNewPatterns.some((pattern) =>
+                        pattern.test(
+                            input.title
+                                .normalize('NFD')
+                                .replace(/[\u0300-\u036f]/g, '')
+                                .toLowerCase(),
+                        ),
+                    ) ||
+                    explicitNewPatterns.some((pattern) =>
+                        pattern.test(
+                            input.description
+                                .normalize('NFD')
+                                .replace(/[\u0300-\u036f]/g, '')
+                                .toLowerCase(),
+                        ),
+                    );
+
+                propertyCondition = hasExplicitNewEvidence ? 'NEUF' : 'INCONNU';
+            } else if (aiPropertyCondition === 'ANCIEN') {
+                propertyCondition = 'ANCIEN';
+            } else {
+                propertyCondition = input.extracted.propertyCondition ?? 'INCONNU';
+            }
             const merged = this.mergePropertyFeatures(input.extracted.propertyFeatures, result.propertyFeatures);
             return {
                 address: result.location?.address ?? input.extracted.address ?? '',
@@ -3064,7 +3244,7 @@ Retourne uniquement le JSON demandé.
                     : this.normalizeCity(input.extracted.city),
                 codePostal: result.location?.codePostal ?? input.extracted.codePostal,
                 typeLocal: result.typeLocal ?? input.extracted.typeLocal,
-                propertyCondition: result.propertyCondition ?? input.extracted.propertyCondition ?? 'INCONNU',
+                propertyCondition,
                 surface: result.surface ?? input.extracted.surface,
                 terrain: result.terrain ?? input.extracted.terrain,
                 rooms: result.rooms ?? input.extracted.rooms,
